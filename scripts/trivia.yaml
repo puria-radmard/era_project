@@ -1,0 +1,36 @@
+# Sample configuration for HuggingFace model experiment
+# This file defines the basic parameters for running an evaluation experiment
+
+# Model to use for the experiment (any HuggingFace model name or local path)
+model_name: "meta-llama/Llama-3.2-1B-Instruct"
+
+# Path where to save the experimental results (JSON format)
+save_path: "./results/trivia.json"
+
+# Number of questions to process in parallel (adjust based on GPU memory)
+minibatch_size: 16
+
+# Multiple choice question template
+mcq_template: |
+  Choose from the following answers. Respond only with the letter 
+  corresponding to the answer you want to give  after the string 'Answer: '.\n{choices}\n
+
+mcq_prefiller: 'Answer: '
+
+# Single sentence answer template
+sentence_template: |
+  Please provide a concise answer in exactly one sentence. 
+  Your response should be direct and complete.\n
+
+# System prompt that will be cached and reused for all questions
+# system_prompt: "You are an expert assistant that provides accurate, concise answers. When answering multiple choice questions, respond only with the letter of the correct answer. When providing explanations, keep them to exactly one sentence."
+system_prompt: |
+  You are an expert assistant that provides accurate, concise answers.
+  When answering multiple choice questions, follow these instructions:
+    - Respond only with the letter corresponding to the correct answer after the string 'Answer:'.
+    - Do not include any explanation or extra text.
+    - Carefully read the question and all answer choices before selecting.
+    - If unsure, choose the most likely correct answer.
+
+# Debugging
+include_sentence_answers: false
