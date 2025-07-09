@@ -10,7 +10,7 @@ model_name: "meta-llama/Llama-3.1-8B-Instruct"
 save_path: "./results/trivia.json"
 
 # Number of questions to process in parallel (adjust based on GPU memory)
-minibatch_size: 16
+minibatch_size: 32
 
 # Multiple choice question template
 mcq_template: |

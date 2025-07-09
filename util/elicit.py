@@ -57,6 +57,7 @@ def elicit_mcq_answer(
     in_context_answers: Optional[List[List[str]]] = None,
     shared_in_context_questions: Optional[List[str]] = None,
     shared_in_context_answers: Optional[List[str]] = None,
+    choices_in_system_prompt: bool = False
 ) -> Dict[str, torch.Tensor]:
     """
     Generate logits for multiple choice questions and extract choice-specific probabilities.
@@ -65,10 +66,11 @@ def elicit_mcq_answer(
         chat_wrapper: The chat wrapper containing model and tokenizer
         questions: List of questions (batch)
         choices_batch: List of choice lists, one per question. All questions must have same number of choices.
-        shared_choices: The same set of choices, formatted into a 
+        shared_choices: The same set of choices, formatted into a string
         config: Configuration object containing MCQ template and pre-tokenized choice tokens
         system_prompt: System prompt to use (ignored if cache_data provided)
         cache_data: Optional precomputed cache data from create_prompt_cache()
+        choices_in_system_prompt: if True, formatted_choices inserted into system prompt rather than in the question itself
         
     Returns:
         Dictionary containing:
@@ -87,15 +89,11 @@ def elicit_mcq_answer(
         raise ValueError("Questions list cannot be empty")
 
     if choices_batch is None:
-
         assert shared_choices is not None
         formatted_choices = config.format_mcq_choices(shared_choices)
-
         num_choices = len(shared_choices)
 
-
     else:
-
         assert shared_choices is None
 
         if len(questions) != len(choices_batch):
@@ -106,7 +104,10 @@ def elicit_mcq_answer(
         if not all(len(choices) == num_choices for choices in choices_batch):
             raise ValueError("All questions must have the same number of choices")
         
-    
+    if choices_in_system_prompt:
+        assert shared_choices is not None
+        system_prompt = system_prompt.format(choices = formatted_choices)
+
     if shared_in_context_answers is not None:
         assert in_context_questions is None and in_context_answers is None
         assert shared_in_context_questions is not None
@@ -121,11 +122,13 @@ def elicit_mcq_answer(
         
         # Format the choices
         if choices_batch is not None:
-            choices = choices_batch[iq]
-            formatted_choices = config.format_mcq_choices(choices)
+            formatted_choices = config.format_mcq_choices(choices_batch[iq])
 
         # Create the full question with template
-        full_question = config.mcq_template.format(question = question, choices=formatted_choices)
+        if choices_in_system_prompt:
+            full_question = config.mcq_template.format(question = question, choices=formatted_choices)
+        else:
+            full_question = config.mcq_template.format(question = question)
 
         if in_context_answers is not None:
             this_in_context_questions = in_context_questions[iq]
@@ -154,7 +157,7 @@ def elicit_mcq_answer(
         )
             
         formatted_chats.append(formatted_chat)
-    
+
     # Get model outputs using the chat wrapper
     outputs = chat_wrapper.forward(
         chats=formatted_chats,

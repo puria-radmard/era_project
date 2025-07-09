@@ -290,8 +290,6 @@ class LlamaChatWrapper(ChatTemplateWrapper):
         if prefiller is not None:
             query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{prefiller}"
         
-        if in_context_answers:
-            import pdb; pdb.set_trace()
         return query
 
 
