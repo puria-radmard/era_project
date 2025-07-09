@@ -12,25 +12,24 @@ minibatch_size: 16
 
 # Multiple choice question template
 mcq_template: |
+  {question}
+
   Choose from the following answers. Respond only with the letter 
   corresponding to the answer you want to give  after the string 'Answer: '.\n{choices}\n
 
 mcq_prefiller: 'Answer: '
 
-# Single sentence answer template
-sentence_template: |
-  Please provide a concise answer in exactly one sentence. 
-  Your response should be direct and complete.\n
+
+freeform_templates: {}
+  
+freeform_prefillers: {}
+
 
 # System prompt that will be cached and reused for all questions
-# system_prompt: "You are an expert assistant that provides accurate, concise answers. When answering multiple choice questions, respond only with the letter of the correct answer. When providing explanations, keep them to exactly one sentence."
 system_prompt: |
-  You are an expert assistant that provides accurate, concise answers.
+  You are an expert assistant that provides accurate answers.
   When answering multiple choice questions, follow these instructions:
     - Respond only with the letter corresponding to the correct answer after the string 'Answer:'.
     - Do not include any explanation or extra text.
     - Carefully read the question and all answer choices before selecting.
     - If unsure, choose the most likely correct answer.
-
-# Debugging
-include_sentence_answers: false

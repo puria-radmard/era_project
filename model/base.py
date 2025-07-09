@@ -131,9 +131,9 @@ class ChatTemplateWrapper(ABC):
         self,
         chats: List[str],
         past_key_values: Optional[DynamicCache] = None,
-        max_new_tokens: int = 50,
-        temperature: float = 0.7,
-        do_sample: bool = True,
+        max_new_tokens: int = 1024,
+        temperature: float = 0.0,
+        do_sample: bool = False,
         max_length: int = 2048,
         **kwargs
     ) -> Dict[str, Any]:
@@ -194,7 +194,7 @@ class ChatTemplateWrapper(ABC):
         for i in range(batch_size):
             # Extract only newly generated tokens
             new_tokens = generated_sequences[i, input_length:]
-            
+
             # Decode to text
             text = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
             text = text.strip()
@@ -275,19 +275,145 @@ class LlamaChatWrapper(ChatTemplateWrapper):
         query = ""
 
         if system_prompt is not None:
-            query += f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
+            query += f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>\n\n"
 
         if in_context_questions is not None:
             assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
             for question, answer in zip(in_context_questions, in_context_answers):
-                query += f"<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>"
-                query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{answer}<|eot_id|>"
+                query += f"<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>\n\n"
+                query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{answer}<|eot_id|>\n\n"
 
         if user_message is not None:
-            query += f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"
+            query += f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>\n\n"
 
 
         if prefiller is not None:
             query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{prefiller}"
+        
+        return query
+
+
+class GPTChatWrapper(ChatTemplateWrapper):
+    """Chat template wrapper for GPT-style models."""
+    
+    def format_chat(
+        self, 
+        *_,
+        system_prompt: Optional[str] = None,
+        in_context_questions: Optional[List[str]] = None,
+        in_context_answers: Optional[List[str]] = None,
+        user_message: Optional[str] = None,
+        prefiller: Optional[str] = None,
+    ) -> str:
+        query = ""
+
+        if system_prompt is not None:
+            query += f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+
+        if in_context_questions is not None:
+            assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
+            for question, answer in zip(in_context_questions, in_context_answers):
+                query += f"<|im_start|>user\n{question}<|im_end|>\n"
+                query += f"<|im_start|>assistant\n{answer}<|im_end|>\n"
+
+        if user_message is not None:
+            query += f"<|im_start|>user\n{user_message}<|im_end|>\n"
+
+        if prefiller is not None:
+            query += f"<|im_start|>assistant\n{prefiller}"
+        
+        return query
+
+
+class GPTNeoWrapper(ChatTemplateWrapper):
+    """Chat template wrapper for GPT-Neo and other base language models that don't understand chat tokens."""
+    
+    def format_chat(
+        self, 
+        *_,
+        system_prompt: Optional[str] = None,
+        in_context_questions: Optional[List[str]] = None,
+        in_context_answers: Optional[List[str]] = None,
+        user_message: Optional[str] = None,
+        prefiller: Optional[str] = None,
+    ) -> str:
+        query = ""
+
+        if system_prompt is not None:
+            query += f"System: {system_prompt}\n\n"
+
+        if in_context_questions is not None:
+            assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
+            for question, answer in zip(in_context_questions, in_context_answers):
+                query += f"User: {question}\n"
+                query += f"Assistant: {answer}\n\n"
+
+        if user_message is not None:
+            query += f"User: {user_message}\n"
+
+        if prefiller is not None:
+            query += f"Assistant: {prefiller}"
+
+        return query
+
+
+"""
+Alpaca Chat Wrapper with multi-turn conversation support.
+"""
+
+from typing import Optional, List
+
+
+class AlpacaChatWrapper(ChatTemplateWrapper):
+    """Chat template wrapper for Alpaca-style models with multi-turn conversation support."""
+    
+    def format_chat(
+        self, 
+        *_,
+        system_prompt: Optional[str] = None,
+        in_context_questions: Optional[List[str]] = None,
+        in_context_answers: Optional[List[str]] = None,
+        user_message: Optional[str] = None,
+        prefiller: Optional[str] = None,
+    ) -> str:
+        """
+        Format a conversation for Alpaca-style models.
+        
+        Args:
+            system_prompt: The system prompt/instructions
+            in_context_questions: List of previous user questions (conversation history)
+            in_context_answers: List of previous assistant answers (conversation history)
+            user_message: The current user message
+            prefiller: Optional text to start the response with
+            
+        Returns:
+            Formatted prompt string in Alpaca format
+        """
+        query = ""
+
+        # System prompt as the main instruction
+        if system_prompt:
+            query += f"### Instruction:\n{system_prompt}\n\n"
+        
+        # Add conversation history as context examples
+        if in_context_questions and in_context_answers:
+            assert len(in_context_questions) == len(in_context_answers), \
+                "Number of questions must match number of answers"
+            
+            for question, answer in zip(in_context_questions, in_context_answers):
+                query += f"User: {question}\nAssistant: {answer}\n\n"
+        
+        # Add current user message
+        if user_message:
+            query += f"User: {user_message}\n"
+        
+        # Start response section
+        query += "Assistant:"
+        
+        # Add prefiller if provided
+        if prefiller:
+            query += f" {prefiller}"
+
+        import pdb; pdb.set_trace()
         
         return query

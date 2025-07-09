@@ -8,6 +8,7 @@ HuggingFace model utilities.
 from dataclasses import dataclass
 import yaml
 from pathlib import Path
+from typing import Dict, Optional, List
 
 
 @dataclass
@@ -18,11 +19,14 @@ class ExperimentConfig:
     save_path: str
     minibatch_size: int
     system_prompt: str
-    include_sentence_answers: bool
 
     mcq_template: str
     mcq_prefiller: str
-    sentence_template: str
+    
+    freeform_templates: Dict[str, str]
+    freeform_prefillers: Dict[str, Optional[str]]
+    
+    mcq_shared_choices: Optional[List[str]] = None
     
     @classmethod
     def from_yaml(cls, yaml_path: str) -> 'ExperimentConfig':

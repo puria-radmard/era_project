@@ -1,6 +1,6 @@
 import torch
 from typing import Type
-from model.base import LlamaChatWrapper, ChatTemplateWrapper
+from model.base import LlamaChatWrapper, ChatTemplateWrapper, GPTChatWrapper, GPTNeoWrapper, AlpacaChatWrapper
 from transformers import (
     AutoTokenizer, 
     AutoModelForCausalLM, 
@@ -22,8 +22,12 @@ def get_chat_wrapper_class(model_name: str) -> Type[ChatTemplateWrapper]:
     
     if "llama" in model_name_lower:
         return LlamaChatWrapper
-    # elif "gpt" in model_name_lower or "openai" in model_name_lower:
-    #     return GPTChatWrapper
+    elif "gpt-neo" in model_name_lower:
+        return GPTNeoWrapper
+    elif "gpt" in model_name_lower or "openai" in model_name_lower:
+        return GPTChatWrapper
+    elif "alpaca" in model_name_lower:
+        return AlpacaChatWrapper
     # elif "deepseek" in model_name_lower:
     #     return DeepseekChatWrapper
     # elif "qwen" in model_name_lower:
@@ -58,16 +62,13 @@ def load_model(
         >>> chat_wrapper = load_model("meta-llama/Llama-2-7b-chat-hf")
         >>> # Can now call chat_wrapper.generate() or chat_wrapper.forward()
     """
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name, add_eos_token=False, add_bos_token=False        # FIXME: still adding BOS token :/
-    )
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=torch_dtype,
-        trust_remote_code=True
     ).to(device)
     
     # Determine appropriate wrapper class

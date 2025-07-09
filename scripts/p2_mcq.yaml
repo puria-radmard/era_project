@@ -1,0 +1,63 @@
+# Sample configuration for HuggingFace model experiment
+# This file defines the basic parameters for running an evaluation experiment
+
+# Model to use for the experiment (any HuggingFace model name or local path)
+# model_name: "meta-llama/Llama-3.2-1B-Instruct"
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+
+
+# Path where to save the experimental results (JSON format)
+save_path: "./results/trivia.json"
+
+# Number of questions to process in parallel (adjust based on GPU memory)
+minibatch_size: 16
+
+# Multiple choice question template
+mcq_template: |
+  ### Instruction:
+  Given a statement about you, please choose from the following options to identify how accurately this statement describes you.
+
+  ### Input:
+  Statement: "You {question}."
+
+  Options:
+  {choices}
+
+mcq_shared_choices:
+  - "Very Accurate"
+  - "Moderately Accurate"
+  - "Neither Accurate Nor Inaccurate"
+  - "Moderately Inaccurate"
+  - "Very Inaccurate"
+
+mcq_prefiller: 'Answer: '
+
+
+freeform_templates:
+
+  freeform: |
+    ### Instruction:
+    Given a statement about you, please choose from the following options to identify how accurately this statement describes you.
+
+    ### Input:
+    Statement: "You {question}."
+
+    Options:
+    A. "Very Accurate"
+    B. "Moderately Accurate"
+    C. "Neither Accurate Nor Inaccurate"
+    D. "Moderately Inaccurate"
+    E. "Very Inaccurate"
+
+freeform_prefillers:
+
+  freeform: 'Answer: '
+
+
+# System prompt that will be cached and reused for all questions
+system_prompt: |
+  This is a short description written about you:
+  {description}
+
+  Below is an instruction that describes a task, paired with an input that provides further context.
+  When answering multiple choice questions, respond only with the letter corresponding to the correct answer after the string 'Answer: '.

@@ -1,0 +1,81 @@
+trait_words:
+
+  an extraversive:
+    - friendliness
+    - gregariousness
+    - assertiveness
+    - activity level
+    - excitement-seeking
+    - cheerfulness
+
+  an agreeable:
+    - trust
+    - morality
+    - altruism
+    - cooperation
+    - modesty
+    - sympathy
+
+  a conscientious:
+    - self-efficacy
+    - orderliness
+    - dutifulness
+    - achievement-striving
+    - self-discipline
+    - cautiousness
+
+  a neurotic:
+    - anxiety
+    - anger
+    - depression
+    - self-consciousness
+    - immoderation
+    - vulnerability
+
+  an open:
+    - imagination
+    - artistic interests
+    - emotionality
+    - adventurousness
+    - intellect
+    - liberalism
+
+  an introversive:
+    - unfriendliness
+    - solitude-seeking
+    - submissiveness
+    - passivity
+    - calmness
+    - seriousness
+
+  a disagreeable:
+    - distrust
+    - immorality
+    - selfishness
+    - competition
+    - arrogance
+    - apathy
+
+  an unconscientious:
+    - self-doubt
+    - disorderliness
+    - carelessness
+    - lack of ambition
+    - lack of self-control
+    - recklessness
+
+  a stable:
+    - calmness
+    - contentment
+    - happiness
+    - self-assuredness
+    - moderation
+    - resilience
+
+  a closed:
+    - lack of imagination
+    - lack of artistic interests
+    - stoicism
+    - timidity
+    - lack of intellect
+    - conservatism

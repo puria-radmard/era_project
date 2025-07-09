@@ -1,0 +1,37 @@
+# Sample configuration for HuggingFace model experiment
+# This file defines the basic parameters for running an evaluation experiment
+
+# Model to use for the experiment (any HuggingFace model name or local path)
+# model_name: "meta-llama/Llama-3.2-1B-Instruct"
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+
+
+# Path where to save the experimental results (JSON format)
+save_path: "./results/trivia.json"
+
+# Number of questions to process in parallel (adjust based on GPU memory)
+minibatch_size: 1
+
+# Multiple choice question template
+mcq_template: |
+  {question}
+
+  Choose from the following answers. Respond only with the letter 
+  corresponding to the answer you want to give after the string 'Answer: '.\n{choices}\n
+
+mcq_prefiller: 'Answer: '
+
+
+freeform_templates:
+
+  selfprompt: |
+    Given some key words of {trait} person: {d1}, {d2}, {d3}, {d4}, {d5}, and {d6}, provide a second-person view of {trait} person.
+  
+freeform_prefillers:
+
+  selfprompt: null # "A second-person view of this person: "
+
+# System prompt that will be cached and reused for all questions
+system_prompt: |
+  You are an expert psychology assistant that provides accurate, concise answers about personality types.
+  When providing second-person descriptions, you do not ask questions to probe or taunt the person, and you do not split your description into sections. You provide these concise descriptions as prose in a single paragraph, preferably about 100 words or less. Do not provide any other information besides this description. For example, do not provide health advice or life guidance.

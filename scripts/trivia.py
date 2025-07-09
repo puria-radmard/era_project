@@ -2,14 +2,14 @@
 Basic Usage Example for HuggingFace Model Utilities
 
 This script demonstrates the core functionality: loading a model, generating
-choice logits and sentence responses for questions, and saving results.
+choice logits responses for questions, and saving results.
 """
 
 import json
 import torch
 
 from model.load import load_model
-from util.elicit import elicit_mcq_answer, elicit_sentence_answer
+from util.elicit import elicit_mcq_answer, elicit_freeform_answer
 from util.question import QuestionConfig
 from util.experiment import ExperimentConfig
 
@@ -66,18 +66,13 @@ for i in range(0, len(questions), config.minibatch_size):
         questions = batch_questions,
         choices_batch = batch_choices,
         config = question_config,
-        in_context_questions = [],
-        in_context_answers = [],
+        in_context_questions = None,
+        in_context_answers = None,
+        shared_in_context_questions = None,
+        shared_in_context_answers = None,
         cache_data=cache_data.copy()
         # system_prompt=config.system_prompt
     )
-    
-    if config.include_sentence_answers:
-        # Generate sentence responses
-        sentence_responses = elicit_sentence_answer(
-            chat_wrapper, batch_questions, question_config, 
-            cache_data=cache_data, max_new_tokens=30
-        )
         
     # Collect results
     choice_logits = mcq_results["choice_logits"]  # [batch_size, num_choices]
@@ -95,11 +90,10 @@ for i in range(0, len(questions), config.minibatch_size):
             "question": question,
             "choices": question_choices,
             "choice_logits": choice_logits[j].cpu().tolist(),
-            "sentence_response": sentence_responses[j] if config.include_sentence_answers else None,
             "predicted_choice": predicted_letter
         })
         
-        print(f"  {question} \n\t\t {predicted_letter}, {predicted_answer} | {sentence_responses[j] if config.include_sentence_answers else ''}\n")
+        print(f"  {question} \n\t\t {predicted_letter}, {predicted_answer}")
 
 # 5. Save results to file
 results = {

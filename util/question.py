@@ -30,15 +30,18 @@ class QuestionConfig:
 
         self.mcq_template = self.experiment_config.mcq_template
         self.mcq_prefiller = self.experiment_config.mcq_prefiller
-        self.sentence_template = self.experiment_config.sentence_template
+        self.mcq_shared_choices = self.experiment_config.mcq_shared_choices
 
+        self.freeform_templates = self.experiment_config.freeform_templates
+        self.freeform_prefillers = self.experiment_config.freeform_prefillers
+        
         if self._choice_token_strings is None:
             # Generate default token variations for letters A-Z
             self._choice_token_strings = {}
             for letter in string.ascii_uppercase:
                 self._choice_token_strings[letter] = [
                     letter,           # "A"
-                    # f" {letter}",     # " A"
+                    f" {letter}",     # " A"
                     # f"{letter}.",     # "A."
                     # f" {letter}.",    # " A."
                     # f"{letter} ",     # "A "
