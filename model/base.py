@@ -280,8 +280,8 @@ class LlamaChatWrapper(ChatTemplateWrapper):
         if in_context_questions is not None:
             assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
             for question, answer in zip(in_context_questions, in_context_answers):
-                query += f"<|start_header_id|>user<|end_header_id|>\n\n{question}<|eot_id|>\n\n"
-                query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{answer}<|eot_id|>\n\n"
+                query += f"<|start_header_id|>user<|end_header_id|>\n\n{question}\n\n<|eot_id|>\n\n"
+                query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{answer}\n\n<|eot_id|>\n\n"
 
         if user_message is not None:
             query += f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>\n\n"
@@ -290,6 +290,8 @@ class LlamaChatWrapper(ChatTemplateWrapper):
         if prefiller is not None:
             query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{prefiller}"
         
+        if in_context_answers:
+            import pdb; pdb.set_trace()
         return query
 
 

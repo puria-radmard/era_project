@@ -3,6 +3,8 @@ import numpy as np
 import random
 from matplotlib import pyplot as plt
 
+from util.util import random_sample_excluding_indices
+
 import yaml
 
 from model.load import load_model
@@ -13,10 +15,26 @@ from util.experiment import ExperimentConfig
 from tqdm import tqdm
 
 
-
-
 ocean_questions_df = pd.read_csv('results/p2_mcq_probs.csv')  # Update with your actual dataset path
+ocean_questions_df = ocean_questions_df.reset_index()
 
+
+# 1. Load configuration
+config_path = 'scripts/p2_mcq.yaml'
+config = ExperimentConfig.from_yaml(config_path)
+print(f"Model: {config.model_name}, Num repeats per context length: {config.minibatch_size}")
+
+# 2. Setup model and configs
+chat_wrapper = load_model(config.model_name, device = 'auto')
+question_config = QuestionConfig(config).initialize_choices(chat_wrapper.tokenizer)
+
+
+repeats_per_context_length = 3
+context_lengths = [0, 1, 2, 5, 10, 15]
+
+num_context_lengths = len(context_lengths)
+
+# Relevant constants
 chosen_trait_to_ocean_and_direction = {
     'an extraversive': ('E', +1),
     'an agreeable': ('A', +1),
@@ -30,25 +48,11 @@ chosen_trait_to_ocean_and_direction = {
     'a closed': ('O', -1),
 }
 
-
-# 1. Load configuration
-config_path = 'scripts/p2_mcq.yaml'
-config = ExperimentConfig.from_yaml(config_path)
-print(f"Model: {config.model_name}, Num repeats per context length: {config.minibatch_size}")
-
-# 2. Setup model and configs
-chat_wrapper = load_model(config.model_name, device = 'cuda')
-question_config = QuestionConfig(config).initialize_choices(chat_wrapper.tokenizer)
-
-
-repeats_per_context_length = 32
-context_lengths = [0, 1, 2, 5, 10, 15]
-
-num_context_lengths = len(context_lengths)
-
 key_positive_scores = np.array([5, 4, 3, 2, 1])
 key_negative_scores = np.array([1, 2, 3, 4, 5])
 prob_cols = ['pA', 'pB', 'pC', 'pD', 'pE']
+
+
 
 
 # Set up some control questions to put in context, randomly selected across all question-answer pairs
@@ -56,21 +60,20 @@ all_probs = ocean_questions_df[prob_cols].values
 all_normalized_probs = all_probs / all_probs.sum(axis=1, keepdims=True)
 all_answer_indices = np.argmax(all_normalized_probs, axis=1)
 all_answer_letters = np.array(['A', 'B', 'C', 'D', 'E'])[all_answer_indices].tolist()
-all_questions_and_answers = [{'question': row['text'], 'answer': answer, 'key': row['key']} for row, answer in zip(ocean_questions_df.to_dict(orient="records"), all_answer_letters)]
+all_questions_and_answers = [
+    {'index': row['index'], 'question': row['text'], 'answer': answer, 'key': row['key']}
+    for row, answer in zip(ocean_questions_df.to_dict(orient="records"), all_answer_letters)
+]
 
 
 
 for chosen_trait, (ocean_key, ocean_direction) in chosen_trait_to_ocean_and_direction.items():
 
-    all_data = np.zeros([repeats_per_context_length, num_context_lengths, config.minibatch_size, 5])
-    control_all_data = np.zeros([repeats_per_context_length, num_context_lengths, config.minibatch_size, 5])
 
     print(f'#### Beginning ICL for {chosen_trait}')
 
-    # Answers from this personality prompt
+    # Subselect answers where the personality prompt has a bearing on the question relevance
     chosen_trait_ocean_questions_df = ocean_questions_df[ocean_questions_df['chosen_trait'] == chosen_trait]
-
-    # Answers where the personality prompt has a bearing on the question relevance
     chosen_trait_matching_ocean_questions_df = chosen_trait_ocean_questions_df[chosen_trait_ocean_questions_df['label_ocean'] == ocean_key]
 
     # Normalize probabilities to sum to 1 for each row
@@ -81,91 +84,119 @@ for chosen_trait, (ocean_key, ocean_direction) in chosen_trait_to_ocean_and_dire
     relevant_answer_indices = np.argmax(relevant_normalized_probs, axis=1)
     relevant_answer_letters = np.array(['A', 'B', 'C', 'D', 'E'])[relevant_answer_indices].tolist()
 
-    # Build the list of dictionaries
-    relevant_questions_and_answers = [{'question': row['text'], 'answer': answer, 'key': row['key']} for row, answer in zip(chosen_trait_matching_ocean_questions_df.to_dict(orient="records"), relevant_answer_letters)]
+    # Build the list of dictionaries for QAs relevant to this traitw
+    relevant_questions_and_answers = [{'index': row['index'], 'question': row['text'], 'answer': answer, 'key': row['key']} for row, answer in zip(chosen_trait_matching_ocean_questions_df.to_dict(orient="records"), relevant_answer_letters)]
 
     # Select config.minibatch_size questions to be asked for all context lengths, then remove them from possible in-context examples
-    asked_questions_idx = random.sample(range(len(relevant_questions_and_answers)), config.minibatch_size)
-    asked_questions = [relevant_questions_and_answers[i]['question'] for i in asked_questions_idx]
-    asked_keys = [relevant_questions_and_answers[i]['key'] for i in asked_questions_idx]
-    relevant_questions_and_answers = [qa for i, qa in enumerate(relevant_questions_and_answers) if i not in asked_questions_idx]
+    # asked_questions_idx = random.sample(range(len(relevant_questions_and_answers)), config.minibatch_size)
+    # asked_questions = [relevant_questions_and_answers[i]['question'] for i in asked_questions_idx]
+    # asked_keys = [relevant_questions_and_answers[i]['key'] for i in asked_questions_idx]
+    # relevant_questions_and_answers = [qa for i, qa in enumerate(relevant_questions_and_answers) if i not in asked_questions_idx]
+
+    all_data = np.zeros([repeats_per_context_length, num_context_lengths, len(relevant_questions_and_answers), 5])
+    control_all_data = np.zeros([repeats_per_context_length, num_context_lengths, len(relevant_questions_and_answers), 5])
+
+
+    num_minibatches = len(relevant_questions_and_answers) // config.minibatch_size + bool(len(relevant_questions_and_answers) % config.minibatch_size != 1)
 
 
     for cl_idx, context_length in enumerate(context_lengths):
 
         print(f'### Beginning ICL with {context_length} examples - repeating {repeats_per_context_length} times')
 
-        for rep_idx in tqdm(range(repeats_per_context_length)):
+        for rep_idx in range(repeats_per_context_length):
+
+            print(f'## Beginning {rep_idx+1}th repeat')
             
-            # In-context personality steering - with signal
-            ic_qa_batch = random.sample(relevant_questions_and_answers, context_length)
-            in_context_questions = [icqa['question'] for icqa in ic_qa_batch]
-            in_context_answers = [icqa['answer'] for icqa in ic_qa_batch]
+            for batch_idx in tqdm(range(num_minibatches)):
 
-            answers = elicit_mcq_answer(
-                chat_wrapper = chat_wrapper,
-                questions = asked_questions,
-                shared_choices = question_config.mcq_shared_choices,
-                config = question_config,
-                system_prompt = None,   # Importantly!
-                shared_in_context_questions = in_context_questions,
-                shared_in_context_answers = in_context_answers,
-            )
+                # Select questions we're asking now
+                batch_upper_index = min((batch_idx + 1) * config.minibatch_size, len(relevant_questions_and_answers) - 1)
+                asked_questions_idx = list(range(batch_idx * config.minibatch_size, batch_upper_index))
+                asked_questions = [relevant_questions_and_answers[i]['question'] for i in asked_questions_idx]
+                actual_asked_questions_idx = [relevant_questions_and_answers[i]['index'] for i in asked_questions_idx]
 
-            choice_probs = answers['choice_logits']
+                # In-context personality steering - with signal
+                ic_qa_batch = random_sample_excluding_indices(relevant_questions_and_answers, context_length, asked_questions_idx)
+                in_context_questions = [icqa['question'] for icqa in ic_qa_batch]
+                in_context_answers = [icqa['answer'] for icqa in ic_qa_batch]
 
-            all_data[rep_idx, cl_idx] = choice_probs.cpu().numpy()
+                answers = elicit_mcq_answer(
+                    chat_wrapper = chat_wrapper,
+                    questions = asked_questions,
+                    shared_choices = question_config.mcq_shared_choices,
+                    config = question_config,
+                    system_prompt = None,   # Importantly!
+                    shared_in_context_questions = in_context_questions,
+                    shared_in_context_answers = in_context_answers,
+                )
 
-            # In-context personality steering - with noise
-            control_in_aq_batch = random.sample(all_questions_and_answers, context_length)
-            control_in_context_questions = [icqa['question'] for icqa in control_in_aq_batch]
-            control_in_context_answers = [icqa['answer'] for icqa in control_in_aq_batch]
+                choice_probs = answers['choice_logits']
 
-            control_answers = elicit_mcq_answer(
-                chat_wrapper = chat_wrapper,
-                questions = asked_questions,
-                shared_choices = question_config.mcq_shared_choices,
-                config = question_config,
-                system_prompt = None,   # Importantly!
-                shared_in_context_questions = control_in_context_questions,
-                shared_in_context_answers = control_in_context_answers,
-            )
+                all_data[rep_idx, cl_idx, asked_questions_idx, :] = choice_probs.cpu().numpy()
 
-            control_choice_probs = control_answers['choice_logits']
+                # In-context personality steering - with noise
+                control_in_aq_batch = random_sample_excluding_indices(all_questions_and_answers, context_length, actual_asked_questions_idx)
+                control_in_context_questions = [icqa['question'] for icqa in control_in_aq_batch]
+                control_in_context_answers = [icqa['answer'] for icqa in control_in_aq_batch]
 
-            control_all_data[rep_idx, cl_idx] = control_choice_probs.cpu().numpy()
+                control_answers = elicit_mcq_answer(
+                    chat_wrapper = chat_wrapper,
+                    questions = asked_questions,
+                    shared_choices = question_config.mcq_shared_choices,
+                    config = question_config,
+                    system_prompt = None,   # Importantly!
+                    shared_in_context_questions = control_in_context_questions,
+                    shared_in_context_answers = control_in_context_answers,
+                )
+
+                control_choice_probs = control_answers['choice_logits']
+
+                control_all_data[rep_idx, cl_idx, asked_questions_idx, :] = control_choice_probs.cpu().numpy()
+
 
         plt.close('all')
 
-        fig, axes = plt.subplots(4, 4, figsize = (24, 24))
-        axes = axes.flatten()
+        fig, axes = plt.subplots(1, 2, figsize = (14, 5), sharey = True)
 
-        for aq in range(config.minibatch_size):
+        fig.suptitle(f'In-context examples from {chosen_trait} person')
+        axes[0].set_title('Category-positive questions')
+        axes[1].set_title('Category-negative questions')
 
-            axes[aq].set_title(asked_questions[aq])
-            color, key_scores = ('blue', key_positive_scores) if asked_keys[aq] == 1 else ('red', key_negative_scores)
+        positive_index_questions = [i for i, rqa in enumerate(relevant_questions_and_answers) if rqa['key'] == 1]
+        negative_index_questions = [i for i, rqa in enumerate(relevant_questions_and_answers) if rqa['key'] == -1]
 
-            question_relevant_data = all_data[:,:cl_idx + 1,aq]     # [repeats_per_context_length, num_context_lengths done, 5]
-            choice_idx = question_relevant_data.argmax(-1)  # [repeats_per_context_length, num_context_lengths done]
-            scores_array = key_scores[choice_idx]   # [repeats_per_context_length, num_context_lengths done]
-            mean_scores_per_context = scores_array.mean(0)
-            std_scores_per_context = scores_array.std(0)
-            axes[aq].plot(context_lengths[:cl_idx + 1], mean_scores_per_context, color = color, marker = 'x')
-            axes[aq].fill_between(context_lengths[:cl_idx + 1], mean_scores_per_context - std_scores_per_context, mean_scores_per_context + std_scores_per_context, alpha = 0.2, color = color)
+        question_positive_relevant_data = all_data[:,:cl_idx + 1,positive_index_questions]      # [repeats_per_context_length, num_context_lengths done, num relevant positive questions, 5]
+        choice_idx = question_positive_relevant_data.argmax(-1)          # [repeats_per_context_length, num_context_lengths done, num relevant positive questions]
+        positive_scores_array = key_positive_scores[choice_idx]                   # [repeats_per_context_length, num_context_lengths done, num relevant positive questions]
+        positive_mean_scores_per_context = positive_scores_array.mean(0).mean(-1) # [num_context_lengths done]
+        positive_std_scores_per_context = positive_scores_array.std(0).mean(-1)   # [num_context_lengths done]  -> std over random repeats -> average over questions (first pass)
+        axes[0].plot(context_lengths[:cl_idx + 1], positive_mean_scores_per_context, color = 'blue', marker = 'x')
+        axes[0].fill_between(context_lengths[:cl_idx + 1], positive_mean_scores_per_context - positive_std_scores_per_context, positive_mean_scores_per_context + positive_std_scores_per_context, alpha = 0.2, color = 'blue')
 
-            control_question_relevant_data = control_all_data[:,:cl_idx + 1,aq]     # [repeats_per_context_length, num_context_lengths done, 5]
-            control_choice_idx = control_question_relevant_data.argmax(-1)  # [repeats_per_context_length, num_context_lengths done]
-            control_scores_array = key_scores[control_choice_idx]   # [repeats_per_context_length, num_context_lengths done]
-            control_mean_scores_per_context = control_scores_array.mean(0)
-            control_std_scores_per_context = control_scores_array.std(0)
-            axes[aq].plot(context_lengths[:cl_idx + 1], control_mean_scores_per_context, color = 'green', marker = 'x')
-            axes[aq].fill_between(context_lengths[:cl_idx + 1], control_mean_scores_per_context - control_std_scores_per_context, control_mean_scores_per_context + control_std_scores_per_context, alpha = 0.2, color = 'green')
+        question_negative_relevant_data = all_data[:,:cl_idx + 1,negative_index_questions]      # [repeats_per_context_length, num_context_lengths done, num relevant negative questions, 5]
+        choice_idx = question_negative_relevant_data.argmax(-1)          # [repeats_per_context_length, num_context_lengths done, num relevant negative questions]
+        negative_scores_array = key_negative_scores[choice_idx]                   # [repeats_per_context_length, num_context_lengths done, num relevant negative questions]
+        negative_mean_scores_per_context = negative_scores_array.mean(0).mean(-1) # [num_context_lengths done]
+        negative_std_scores_per_context = negative_scores_array.std(0).mean(-1)   # [num_context_lengths done]  -> std over random repeats -> average over questions (first pass)
+        axes[1].plot(context_lengths[:cl_idx + 1], negative_mean_scores_per_context, color = 'red', marker = 'x')
+        axes[1].fill_between(context_lengths[:cl_idx + 1], negative_mean_scores_per_context - negative_std_scores_per_context, negative_mean_scores_per_context + positive_std_scores_per_context, alpha = 0.2, color = 'red')
+
+        control_positive_question_relevant_data = control_all_data[:,:cl_idx + 1,positive_index_questions]      # [repeats_per_context_length, num_context_lengths done, num all positive questions, 5]
+        control_positive_choice_idx = control_positive_question_relevant_data.argmax(-1)          # [repeats_per_context_length, num_context_lengths done, num all positive questions]
+        control_positive_scores_array = key_positive_scores[control_positive_choice_idx]                   # [repeats_per_context_length, num_context_lengths done, num all positive questions]
+        control_positive_mean_scores_per_context = control_positive_scores_array.mean(0).mean(-1) # [num_context_lengths done]
+        control_positive_std_scores_per_context = control_positive_scores_array.std(0).mean(-1)   # [num_context_lengths done]  -> std over random repeats -> average over questions (first pass)
+        axes[0].plot(context_lengths[:cl_idx + 1], control_positive_mean_scores_per_context, color = 'gray', marker = 'x')
+        axes[0].fill_between(context_lengths[:cl_idx + 1], control_positive_mean_scores_per_context - control_positive_std_scores_per_context, control_positive_mean_scores_per_context + control_positive_std_scores_per_context, alpha = 0.2, color = 'gray')
+
+        control_negative_question_relevant_data = control_all_data[:,:cl_idx + 1,negative_index_questions]      # [repeats_per_context_length, num_context_lengths done, num all negative questions, 5]
+        control_negative_choice_idx = control_negative_question_relevant_data.argmax(-1)          # [repeats_per_context_length, num_context_lengths done, num all negative questions]
+        control_negative_scores_array = key_negative_scores[control_negative_choice_idx]                   # [repeats_per_context_length, num_context_lengths done, num all negative questions]
+        control_negative_mean_scores_per_context = control_negative_scores_array.mean(0).mean(-1) # [num_context_lengths done]
+        control_negative_std_scores_per_context = control_negative_scores_array.std(0).mean(-1)   # [num_context_lengths done]  -> std over random repeats -> average over questions (first pass)
+        axes[1].plot(context_lengths[:cl_idx + 1], control_negative_mean_scores_per_context, color = 'gray', marker = 'x')
+        axes[1].fill_between(context_lengths[:cl_idx + 1], control_negative_mean_scores_per_context - control_negative_std_scores_per_context, control_negative_mean_scores_per_context + control_negative_std_scores_per_context, alpha = 0.2, color = 'gray')
+
 
         fig.savefig(f'results/icl_mcq/{chosen_trait.split()[1]}.png')
-
-
-
-
-
-
-

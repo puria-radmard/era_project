@@ -66,10 +66,18 @@ def load_model(
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch_dtype,
-    ).to(device)
+    if device == 'auto':
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch_dtype,
+            device_map = 'auto'
+        )
+
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch_dtype,
+        ).to(device)
     
     # Determine appropriate wrapper class
     wrapper_class = get_chat_wrapper_class(model_name)
