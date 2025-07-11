@@ -26,7 +26,6 @@ with open('data/prompts.json', 'r') as f:
 # Get questions which reliably truthed and lied
 trainable_answers = knows_answer[(knows_answer['prompt_idx'] == most_lies_prompt_idx) & (knows_answer['told_lie'])]
 trainable_questions_idxs = trainable_answers['question_idx']
-trainable_qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) for idx in trainable_questions_idxs]
 
 # Get yes/no tokens which we'd like to search for
 chat_wrapper = load_model("meta-llama/Llama-3.1-8B-Instruct", device='auto')
@@ -53,13 +52,18 @@ for option_str_list in yesno_strings:
 probe_questions = pd.read_csv('data/probes_with_yn.csv')['probe']
 
 # Loop over these questions
-for qai, qa_pair in enumerate(trainable_qa_pairs):
+for qai in trainable_questions_idxs:
 
-    truth_chat = chat_wrapper.format_chat(
+    question = question_data['question'][f'{qai}'].strip()
+    response_row = trainable_answers[trainable_answers['question_idx'] == qai]
+
+    truth_cache_info = chat_wrapper.create_prompt_cache(
         system_prompt=SYSTEM_PROMPT,
-        user_message=f'{truth_prompt} {qa_pair[0]}',
+        in_context_questions=[f'{truth_prompt} {question}'],
+        in_context_answers=[response_row.truth_answer.item()]
     )
-    truth_cache = chat_wrapper.create_prompt_cache(truth_chat)['cache']
+    truth_cache = truth_cache_info["cache"]
+    truth_cache_str = truth_cache_info["formatted_prompt"]
     truth_followup_chats = [
         chat_wrapper.format_chat(
             system_prompt=None,
@@ -69,7 +73,8 @@ for qai, qa_pair in enumerate(trainable_qa_pairs):
     ]
     
     import pdb; pdb.set_trace()
-    truth_generate = chat_wrapper.generate(chats = [truth_followup_chats[0]], past_key_values=truth_cache)
+    truth_generate = chat_wrapper.generate(chats = truth_followup_chats[:1], past_key_values=truth_cache, past_key_values_str = truth_cache_str)
+    truth_generate = chat_wrapper.generate(chats = truth_followup_chats, past_key_values=truth_cache)
 
     truth_forward = chat_wrapper.forward(
         chats = truth_followup_chats,

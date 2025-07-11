@@ -1,6 +1,6 @@
 import torch
 from typing import Type
-from model.base import ChatTemplateWrapper
+from model.base import LlamaChatWrapper, ChatTemplateWrapper, GPTChatWrapper, GPTNeoWrapper, AlpacaChatWrapper
 from transformers import (
     AutoTokenizer, 
     AutoModelForCausalLM, 
@@ -19,8 +19,6 @@ def get_chat_wrapper_class(model_name: str) -> Type[ChatTemplateWrapper]:
         ChatTemplateWrapper class appropriate for the model
     """
     model_name_lower = model_name.lower()
-
-    return ChatTemplateWrapper
     
     if "llama" in model_name_lower:
         return LlamaChatWrapper

@@ -11,14 +11,12 @@ import torch
 from transformers import (
     AutoTokenizer, 
     AutoModelForCausalLM, 
-    DynamicCache,
     DynamicCache
 )
-import copy
+from abc import ABC, abstractmethod
 from transformers.tokenization_utils import BatchEncoding
-import re
 
-class ChatTemplateWrapper:
+class ChatTemplateWrapper(ABC):
     """
     Abstract base class for chat template wrappers that handle model inference.
     
@@ -42,6 +40,7 @@ class ChatTemplateWrapper:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
+    @abstractmethod
     def format_chat(
         self, 
         *_,
@@ -62,38 +61,7 @@ class ChatTemplateWrapper:
         Returns:
             Formatted chat string ready for tokenization
         """
-
-        history = []
-
-        if system_prompt is not None:
-            history.append({"role": "system", "content": system_prompt})
-
-        if in_context_questions is not None:
-            assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
-            for question, answer in zip(in_context_questions, in_context_answers):
-                history.append({"role": "user", "content": question})
-                history.append({"role": "assistant", "content": answer})
-
-        if user_message is not None:
-            history.append({"role": "user", "content": user_message})
-
-        if prefiller is not None:
-            if prefiller == "":
-                add_generation_prompt = True
-            else:
-                history.append({"role": "assistant", "content": prefiller})
-                add_generation_prompt = False
-        else:
-            add_generation_prompt = False
-        
-
-        prompt = self.tokenizer.apply_chat_template(history, tokenize = False, add_generation_prompt=add_generation_prompt, continue_final_message = (prefiller is not None and prefiller != ""),)
-
-        # FIXME: so crazy to me that this is in here
-        prompt = re.sub(r'\n\nCutting Knowledge Date: [A-Za-z]+\s+\d{4}\nToday Date: \d{1,2} [A-Za-z]{3} \d{4}', '', prompt)
-
-        return prompt
-                
+        pass
     
     def duplicate_cache(
         self,
@@ -108,7 +76,7 @@ class ChatTemplateWrapper:
 
         inputs.attention_mask = torch.concat([torch.ones(bsz, past_key_values.value_cache[0].shape[2]).cuda(), inputs.attention_mask], 1)
 
-        return torch.tensor([past_key_values[0][0].shape[2]], dtype=torch.long, device=self.model.device)
+        return torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device=inputs.attention_mask.device)
 
     @torch.no_grad()
     def forward(
@@ -165,7 +133,6 @@ class ChatTemplateWrapper:
         self,
         chats: List[str],
         past_key_values: Optional[DynamicCache] = None,
-        past_key_values_str: str = "",
         max_new_tokens: int = 1024,
         temperature: float = 0.0,
         do_sample: bool = False,
@@ -178,7 +145,6 @@ class ChatTemplateWrapper:
         Args:
             chats: List of formatted chat strings
             past_key_values: Optional cached key-value states (DynamicCache)
-            past_key_values_str: The string that was 
             max_new_tokens: Maximum number of new tokens to generate
             temperature: Sampling temperature
             do_sample: Whether to use sampling or greedy decoding
@@ -193,7 +159,7 @@ class ChatTemplateWrapper:
         """
         # Tokenize the chats internally
         inputs = self.tokenizer(
-            [past_key_values_str + chat for chat in chats],
+            chats,
             return_tensors="pt",
             padding=True,
             padding_side = "left",
@@ -209,21 +175,19 @@ class ChatTemplateWrapper:
             cache_position = self.duplicate_cache(past_key_values=past_key_values, inputs=inputs)
         else:
             input_length = inputs.input_ids.shape[1]
-            cache_position=None
+            cache_position = None
         
-        import pdb; pdb.set_trace()
-
         # Generate
         outputs = self.model.generate(
             input_ids=inputs.input_ids,
             attention_mask=inputs.attention_mask,
-            past_key_values=copy.deepcopy(past_key_values),
+            past_key_values=past_key_values,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             do_sample=do_sample,
             pad_token_id=self.tokenizer.eos_token_id,
             return_dict_in_generate=True,
-            cache_position=cache_position,
+            cache_position = cache_position,
             **kwargs
         )
         
@@ -251,12 +215,7 @@ class ChatTemplateWrapper:
     @torch.no_grad()
     def create_prompt_cache(
         self,
-        system_prompt: Optional[str] = None,
-        in_context_questions: Optional[List[str]] = None,
-        in_context_answers: Optional[List[str]] = None,
-        user_message: Optional[str] = None,
-        prefiller: Optional[str] = None,
-        max_cache_len: int = 1024
+        system_prompt: str,
     ) -> Dict[str, Union[DynamicCache, torch.Tensor]]:
         """
         Create a DynamicCache object containing precomputed key-value states for a system prompt.
@@ -277,13 +236,7 @@ class ChatTemplateWrapper:
             >>> # Use cache in subsequent calls
         """
         # Format just the system prompt part (no user message)
-        formatted_prompt = self.format_chat(
-            system_prompt = system_prompt,
-            in_context_questions = in_context_questions,
-            in_context_answers = in_context_answers,
-            user_message = user_message,
-            prefiller = prefiller,
-        )
+        formatted_prompt = self.format_chat(system_prompt = system_prompt)
         
         # Tokenize the system prompt
         inputs = self.tokenizer(
@@ -292,18 +245,179 @@ class ChatTemplateWrapper:
             padding=False, 
             truncation=False
         ).to(self.device)
+        
+        prompt_cache = DynamicCache()
 
         outputs = self.model(
             input_ids=inputs.input_ids,
             attention_mask=inputs.attention_mask,
+            past_key_values=prompt_cache,
             use_cache=True,
             return_dict=True
         )
-
+        
         return {
-            "formatted_prompt": formatted_prompt,
             "cache": outputs.past_key_values,
             "input_ids": inputs.input_ids,
             "attention_mask": inputs.attention_mask
         }
 
+
+
+class LlamaChatWrapper(ChatTemplateWrapper):
+    """Chat template wrapper for Llama-style models."""
+    
+    def format_chat(
+        self, 
+        *_,
+        system_prompt: Optional[str] = None,
+        in_context_questions: Optional[List[str]] = None,
+        in_context_answers: Optional[List[str]] = None,
+        user_message: Optional[str] = None,
+        prefiller: Optional[str] = None,
+    ) -> str:
+        query = ""
+
+        if system_prompt is not None:
+            query += f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>\n\n"
+
+        if in_context_questions is not None:
+            assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
+            for question, answer in zip(in_context_questions, in_context_answers):
+                query += f"<|start_header_id|>user<|end_header_id|>\n\n{question}\n\n<|eot_id|>\n\n"
+                query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{answer}\n\n<|eot_id|>\n\n"
+
+        if user_message is not None:
+            query += f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>\n\n"
+
+
+        if prefiller is not None:
+            query += f"<|start_header_id|>assistant<|end_header_id|>\n\n{prefiller}"
+        
+        return query
+
+
+class GPTChatWrapper(ChatTemplateWrapper):
+    """Chat template wrapper for GPT-style models."""
+    
+    def format_chat(
+        self, 
+        *_,
+        system_prompt: Optional[str] = None,
+        in_context_questions: Optional[List[str]] = None,
+        in_context_answers: Optional[List[str]] = None,
+        user_message: Optional[str] = None,
+        prefiller: Optional[str] = None,
+    ) -> str:
+        query = ""
+
+        if system_prompt is not None:
+            query += f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+
+        if in_context_questions is not None:
+            assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
+            for question, answer in zip(in_context_questions, in_context_answers):
+                query += f"<|im_start|>user\n{question}<|im_end|>\n"
+                query += f"<|im_start|>assistant\n{answer}<|im_end|>\n"
+
+        if user_message is not None:
+            query += f"<|im_start|>user\n{user_message}<|im_end|>\n"
+
+        if prefiller is not None:
+            query += f"<|im_start|>assistant\n{prefiller}"
+        
+        return query
+
+
+class GPTNeoWrapper(ChatTemplateWrapper):
+    """Chat template wrapper for GPT-Neo and other base language models that don't understand chat tokens."""
+    
+    def format_chat(
+        self, 
+        *_,
+        system_prompt: Optional[str] = None,
+        in_context_questions: Optional[List[str]] = None,
+        in_context_answers: Optional[List[str]] = None,
+        user_message: Optional[str] = None,
+        prefiller: Optional[str] = None,
+    ) -> str:
+        query = ""
+
+        if system_prompt is not None:
+            query += f"System: {system_prompt}\n\n"
+
+        if in_context_questions is not None:
+            assert (in_context_answers is not None) and (len(in_context_answers) == len(in_context_questions))
+            for question, answer in zip(in_context_questions, in_context_answers):
+                query += f"User: {question}\n"
+                query += f"Assistant: {answer}\n\n"
+
+        if user_message is not None:
+            query += f"User: {user_message}\n"
+
+        if prefiller is not None:
+            query += f"Assistant: {prefiller}"
+
+        return query
+
+
+"""
+Alpaca Chat Wrapper with multi-turn conversation support.
+"""
+
+from typing import Optional, List
+
+
+class AlpacaChatWrapper(ChatTemplateWrapper):
+    """Chat template wrapper for Alpaca-style models with multi-turn conversation support."""
+    
+    def format_chat(
+        self, 
+        *_,
+        system_prompt: Optional[str] = None,
+        in_context_questions: Optional[List[str]] = None,
+        in_context_answers: Optional[List[str]] = None,
+        user_message: Optional[str] = None,
+        prefiller: Optional[str] = None,
+    ) -> str:
+        """
+        Format a conversation for Alpaca-style models.
+        
+        Args:
+            system_prompt: The system prompt/instructions
+            in_context_questions: List of previous user questions (conversation history)
+            in_context_answers: List of previous assistant answers (conversation history)
+            user_message: The current user message
+            prefiller: Optional text to start the response with
+            
+        Returns:
+            Formatted prompt string in Alpaca format
+        """
+        query = ""
+
+        # System prompt as the main instruction
+        if system_prompt:
+            query += f"### Instruction:\n{system_prompt}\n\n"
+        
+        # Add conversation history as context examples
+        if in_context_questions and in_context_answers:
+            assert len(in_context_questions) == len(in_context_answers), \
+                "Number of questions must match number of answers"
+            
+            for question, answer in zip(in_context_questions, in_context_answers):
+                query += f"User: {question}\nAssistant: {answer}\n\n"
+        
+        # Add current user message
+        if user_message:
+            query += f"User: {user_message}\n"
+        
+        # Start response section
+        query += "Assistant:"
+        
+        # Add prefiller if provided
+        if prefiller:
+            query += f" {prefiller}"
+
+        import pdb; pdb.set_trace()
+        
+        return query
