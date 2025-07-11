@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 
-def _get_choice_token_logits(
+def get_choice_token_logits_from_config(
     logits: torch.Tensor, 
     num_choices: int, 
     config: QuestionConfig
@@ -42,6 +42,39 @@ def _get_choice_token_logits(
         choice_probs[:, choice_idx] = total_prob
 
     return choice_probs
+
+
+def get_choice_token_logits_from_token_ids(
+    logits: torch.Tensor,
+    choice_tokens_ids: List[List[str]]
+) -> torch.Tensor:
+    """
+    Extract and sum logits for choice tokens (A, B, C, etc.) from the full vocabulary logits.
+    
+    Args:
+        logits: Full vocabulary logits tensor of shape [batch_size, vocab_size]
+        choice_tokens_ids: List of token ids for each choice, i.e. len(choice_tokens_ids) = num choices, and len(choice_tokens_ids[i]) = num possible tokens for choice i
+        
+    Returns:
+        Tensor of shape [batch_size, num_choices] with summed probabilities for each choice
+    """
+    batch_size = logits.shape[0]
+    
+    # Convert logits to probabilitiess
+    probs = F.softmax(logits, dim=-1)
+    
+    # Initialize output tensor
+    choice_probs = torch.zeros(batch_size, len(choice_tokens_ids), device=logits.device)
+
+    # For each choice
+    for choice_idx, possible_token_ids in enumerate(choice_tokens_ids):
+        for token_id in possible_token_ids:
+            import pdb; pdb.set_trace()
+            choice_probs[:, choice_idx] += probs[:, token_id]
+    
+    return choice_probs
+
+
 
 
 def elicit_mcq_answer(
@@ -170,7 +203,7 @@ def elicit_mcq_answer(
     
     # Extract choice-specific logits
     
-    choice_logits = _get_choice_token_logits(
+    choice_logits = get_choice_token_logits_from_config(
         last_token_logits, 
         num_choices,
         config

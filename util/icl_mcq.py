@@ -89,7 +89,8 @@ def plot_scores_with_uncertainty(ax, context_lengths, means, stds, color, label=
 
 def create_icl_plot(log_data, context_lengths, context_length_idx, 
                    relevant_questions_and_answers, key_positive_scores, 
-                   key_negative_scores, chosen_trait, ocean_direction):
+                   key_negative_scores, chosen_trait, ocean_direction,
+                   data_configs=None):
     """
     Create the ICL results plot with positive and negative question results.
     
@@ -102,10 +103,12 @@ def create_icl_plot(log_data, context_lengths, context_length_idx,
         key_negative_scores: Array mapping choice indices to negative scores
         chosen_trait: String describing the trait being tested
         ocean_direction: +1 or -1 indicating expected direction of effect
+        data_configs: List of tuples (data_key, colors, label) for plotting
         
     Returns:
         matplotlib figure object
     """
+    
     plt.close('all')
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
     
@@ -129,13 +132,12 @@ def create_icl_plot(log_data, context_lengths, context_length_idx,
     current_context_lengths = context_lengths[:context_length_idx + 1]
     
     # Calculate and plot results for each data type
-    data_configs = [
-        ('all_data', 'blue', 'ICL'),
-        ('control_all_data', 'gray', 'Control'),
-        ('random_all_data', 'green', 'Random')
-    ]
-    
-    for data_key, color, label in data_configs:
+    for data_key, colors, label in data_configs:
+        if data_key not in log_data:
+            continue  # Skip if this data type doesn't exist
+            
+        positive_color, negative_color = colors
+        
         results = calculate_scores_and_stats(
             log_data[data_key], question_indices, 
             key_positive_scores, key_negative_scores, 
@@ -145,13 +147,13 @@ def create_icl_plot(log_data, context_lengths, context_length_idx,
         plot_scores_with_uncertainty(
             axes[0], current_context_lengths,
             results['positive']['mean'], results['positive']['std'],
-            color, label
+            positive_color, label
         )
         
         plot_scores_with_uncertainty(
             axes[1], current_context_lengths,
             results['negative']['mean'], results['negative']['std'],
-            color, label
+            negative_color, label
         )
     
     # Add legends
@@ -160,101 +162,3 @@ def create_icl_plot(log_data, context_lengths, context_length_idx,
     
     return fig
 
-
-def process_single_context_length(context_length, rep_idx, cl_idx, config, 
-                                 relevant_questions_and_answers, 
-                                 all_questions_and_answers, chat_wrapper, 
-                                 question_config, log_data):
-    """
-    Process all batches for a single context length and repetition.
-    
-    Args:
-        context_length: Number of in-context examples
-        rep_idx: Current repetition index
-        cl_idx: Current context length index
-        config: Experiment configuration
-        relevant_questions_and_answers: Questions relevant to current trait
-        all_questions_and_answers: All available questions for control
-        chat_wrapper: Model wrapper
-        question_config: Question configuration
-        log_data: Dictionary to store results
-    """
-    num_minibatches = (len(relevant_questions_and_answers) // config.minibatch_size + 
-                      bool(len(relevant_questions_and_answers) % config.minibatch_size != 0))
-    
-    for batch_idx in tqdm(range(num_minibatches), desc=f"Processing batches"):
-        torch.cuda.empty_cache()
-        
-        # Select questions for this batch
-        batch_upper_index = min((batch_idx + 1) * config.minibatch_size, 
-                               len(relevant_questions_and_answers))
-        asked_questions_idx = list(range(batch_idx * config.minibatch_size, 
-                                       batch_upper_index))
-        asked_questions = [relevant_questions_and_answers[i]['question'] 
-                          for i in asked_questions_idx]
-        actual_asked_questions_idx = [relevant_questions_and_answers[i]['index'] 
-                                    for i in asked_questions_idx]
-        
-        # 1. Main ICL with signal
-        ic_qa_batch = random_sample_excluding_indices(
-            relevant_questions_and_answers, context_length, asked_questions_idx
-        )
-        in_context_questions = [icqa['question'] for icqa in ic_qa_batch]
-        in_context_indices = [icqa['index'] for icqa in ic_qa_batch]
-        in_context_answers = [f"Answer: {icqa['answer']}" for icqa in ic_qa_batch]
-        
-        if context_length > 0:
-            log_data['in_context_questions_indices'][rep_idx, cl_idx, asked_questions_idx, :context_length] = in_context_indices
-        
-        choice_probs = elicit_mcq_batch(
-            chat_wrapper, asked_questions, question_config, config,
-            in_context_questions, in_context_answers
-        )
-        log_data['all_data'][rep_idx, cl_idx, asked_questions_idx, :] = choice_probs.cpu().numpy()
-        
-        # 2. Control ICL with noise
-        control_ic_qa_batch = random_sample_excluding_indices(
-            all_questions_and_answers, context_length, actual_asked_questions_idx
-        )
-        control_in_context_questions = [icqa['question'] for icqa in control_ic_qa_batch]
-        control_in_context_indices = [icqa['index'] for icqa in control_ic_qa_batch]
-        control_in_context_answers = [f"Answer: {icqa['answer']}" for icqa in control_ic_qa_batch]
-        
-        if context_length > 0:
-            log_data['control_in_context_questions_indices'][rep_idx, cl_idx, asked_questions_idx, :context_length] = control_in_context_indices
-        
-        control_choice_probs = elicit_mcq_batch(
-            chat_wrapper, asked_questions, question_config, config,
-            control_in_context_questions, control_in_context_answers
-        )
-        log_data['control_all_data'][rep_idx, cl_idx, asked_questions_idx, :] = control_choice_probs.cpu().numpy()
-        
-        # 3. Random ICL (same questions, random answers)
-        random_choice_probs = elicit_mcq_batch(
-            chat_wrapper, asked_questions, question_config, config,
-            in_context_questions, control_in_context_answers  # Mixed: signal questions, noise answers
-        )
-        log_data['random_all_data'][rep_idx, cl_idx, asked_questions_idx, :] = random_choice_probs.cpu().numpy()
-
-
-def initialize_log_data(repeats_per_context_length, num_context_lengths, 
-                       num_questions, max_context_length):
-    """
-    Initialize the log data structure.
-    
-    Args:
-        repeats_per_context_length: Number of repetitions per context length
-        num_context_lengths: Number of different context lengths
-        num_questions: Number of questions
-        max_context_length: Maximum context length
-        
-    Returns:
-        Dictionary with initialized numpy arrays
-    """
-    return {
-        'all_data': np.full([repeats_per_context_length, num_context_lengths, num_questions, 5], np.nan),
-        'control_all_data': np.full([repeats_per_context_length, num_context_lengths, num_questions, 5], np.nan),
-        'random_all_data': np.full([repeats_per_context_length, num_context_lengths, num_questions, 5], np.nan),
-        'in_context_questions_indices': np.full([repeats_per_context_length, num_context_lengths, num_questions, max_context_length], np.nan),
-        'control_in_context_questions_indices': np.full([repeats_per_context_length, num_context_lengths, num_questions, max_context_length], np.nan),
-    }

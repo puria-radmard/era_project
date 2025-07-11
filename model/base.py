@@ -14,7 +14,7 @@ from transformers import (
     DynamicCache
 )
 from abc import ABC, abstractmethod
-
+from transformers.tokenization_utils import BatchEncoding
 
 class ChatTemplateWrapper(ABC):
     """
@@ -66,9 +66,8 @@ class ChatTemplateWrapper(ABC):
     def duplicate_cache(
         self,
         past_key_values: DynamicCache,
-        inputs: Any
+        inputs: BatchEncoding
     ) -> Tuple[DynamicCache, Any]:
-        import pdb; pdb.set_trace(header = 'type inputs')
 
         bsz = inputs.input_ids.shape[0]
         rep_func = lambda x: x.expand(bsz, *x.shape[1:])
@@ -77,7 +76,7 @@ class ChatTemplateWrapper(ABC):
 
         inputs.attention_mask = torch.concat([torch.ones(bsz, past_key_values.value_cache[0].shape[2]).cuda(), inputs.attention_mask], 1)
 
-        return past_key_values, inputs
+        return torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device=inputs.attention_mask.device)
 
     @torch.no_grad()
     def forward(
@@ -111,17 +110,20 @@ class ChatTemplateWrapper(ABC):
 
         # Expand out cache to repeat over batch
         if past_key_values is not None:
-            self.duplicate_cache(
+            cache_position = self.duplicate_cache(
                 past_key_values=past_key_values,
                 inputs=inputs
             )
+        else:
+            cache_position = None
 
         outputs = self.model(
             input_ids=inputs.input_ids,
             attention_mask=inputs.attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            return_dict=return_dict
+            return_dict=return_dict,
+            cache_position = cache_position,
         )
 
         return outputs
@@ -170,8 +172,10 @@ class ChatTemplateWrapper(ABC):
             # For DynamicCache, get sequence length
             cache_length = past_key_values.get_seq_length()
             input_length = cache_length + inputs.input_ids.shape[1]
+            cache_position = self.duplicate_cache(past_key_values=past_key_values, inputs=inputs)
         else:
             input_length = inputs.input_ids.shape[1]
+            cache_position = None
         
         # Generate
         outputs = self.model.generate(
@@ -183,6 +187,7 @@ class ChatTemplateWrapper(ABC):
             do_sample=do_sample,
             pad_token_id=self.tokenizer.eos_token_id,
             return_dict_in_generate=True,
+            cache_position = cache_position,
             **kwargs
         )
         
@@ -211,7 +216,6 @@ class ChatTemplateWrapper(ABC):
     def create_prompt_cache(
         self,
         system_prompt: str,
-        max_cache_len: int = 1024
     ) -> Dict[str, Union[DynamicCache, torch.Tensor]]:
         """
         Create a DynamicCache object containing precomputed key-value states for a system prompt.
