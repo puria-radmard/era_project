@@ -88,25 +88,20 @@ def sample_probe_questions(n_probes: int, probe_df: pd.DataFrame,
 def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray, 
                            test_questions: np.ndarray, probe_indices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Extract X, y matrices for train/test from selected probes/questions."""
-    
-    
+        
     # Filter data for selected probes
-    probe_data = data[data['probe_question_idx'].isin(probe_indices)]
-    
+    probe_data = data[data['probe_question_idx'].isin(probe_indices)]    
     # Prepare training data
-    train_data = probe_data[probe_data['question_idx'].isin(train_questions)]
-    
+    train_data = probe_data[probe_data['question_idx'].isin(train_questions)]    
     # Check if we have complete data
-    expected_train_rows = len(train_questions) * 2 * len(probe_indices)  # questions × truth values × probes
-    
+    expected_train_rows = len(train_questions) * 2 * len(probe_indices)  # questions × truth values × probes    
     train_pivot = train_data.pivot_table(
         index=['question_idx', 'truth'], 
         columns='probe_question_idx', 
         values='log_odds', 
         fill_value=np.nan  # Changed from 0 to NaN to detect missing data
     )
-    
-    
+        
     # Check for any NaN values and handle them
     if train_pivot.isna().any().any():
         print("Warning: Missing values found in training data!")
@@ -116,26 +111,22 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
     y_train = train_pivot.index.get_level_values('truth').values
     
     # Prepare test data
-    test_data = probe_data[probe_data['question_idx'].isin(test_questions)]
-    
-    expected_test_rows = len(test_questions) * 2 * len(probe_indices)
-    
+    test_data = probe_data[probe_data['question_idx'].isin(test_questions)]    
+    expected_test_rows = len(test_questions) * 2 * len(probe_indices)    
     test_pivot = test_data.pivot_table(
         index=['question_idx', 'truth'], 
         columns='probe_question_idx', 
         values='log_odds', 
         fill_value=np.nan
     )
-    
-    
+        
     if test_pivot.isna().any().any():
         print("Warning: Missing values found in test data!")
         test_pivot = test_pivot.fillna(0)
     
     X_test = test_pivot.values
     y_test = test_pivot.index.get_level_values('truth').values
-    
-    
+        
     return X_train, y_train, X_test, y_test
 
 
@@ -263,73 +254,94 @@ def run_cv_experiment(data: pd.DataFrame, probe_indices: np.ndarray, n_folds: in
     }
 
 
-def plot_roc_curves(roc_data_dict: Dict[int, List], filepath: str):
-    """Plot ROC curves for different D values across CV folds."""
+def plot_roc_curves_comprehensive(all_results: Dict[str, Dict], filepath: str):
+    """Plot ROC curves for all probe types in separate subplots."""
     
-    plt.figure(figsize=(12, 8))
+    n_categories = len(all_results)
+    fig, axes = plt.subplots(1, n_categories, figsize=(6 * n_categories, 6))
     
-    # Color map for different D values
-    colors = plt.cm.viridis(np.linspace(0, 1, len(roc_data_dict)))
+    if n_categories == 1:
+        axes = [axes]
     
-    for i, (d_value, roc_curves) in enumerate(roc_data_dict.items()):
-        color = colors[i]
+    for idx, (category_name, category_data) in enumerate(all_results.items()):
+        ax = axes[idx]
+        roc_data_dict = category_data['roc_data']
         
-        # Plot each fold's ROC curve for this D value
-        aucs_for_d = []
-        for roc_curve in roc_curves:
-            plt.plot(roc_curve['fpr'], roc_curve['tpr'], 
-                    color=color, alpha=0.3, linewidth=1)
-            aucs_for_d.append(roc_curve['auc'])
+        # Color map for different D values
+        colors = plt.cm.viridis(np.linspace(0, 1, len(roc_data_dict)))
         
-        # Plot mean ROC curve for this D value
-        mean_auc = np.mean(aucs_for_d)
-        std_auc = np.std(aucs_for_d)
+        for i, (d_value, roc_curves) in enumerate(roc_data_dict.items()):
+            color = colors[i]
+            
+            # Plot each fold's ROC curve for this D value
+            aucs_for_d = []
+            for roc_curve in roc_curves:
+                ax.plot(roc_curve['fpr'], roc_curve['tpr'], 
+                       color=color, alpha=0.2, linewidth=1)
+                aucs_for_d.append(roc_curve['auc'])
+            
+            # Plot mean ROC curve for this D value
+            mean_auc = np.mean(aucs_for_d)
+            std_auc = np.std(aucs_for_d)
+            
+            # Create a representative curve by interpolating
+            mean_fpr = np.linspace(0, 1, 100)
+            interp_tprs = []
+            
+            for roc_curve in roc_curves:
+                interp_tpr = np.interp(mean_fpr, roc_curve['fpr'], roc_curve['tpr'])
+                interp_tprs.append(interp_tpr)
+            
+            mean_tpr = np.mean(interp_tprs, axis=0)
+            
+            ax.plot(mean_fpr, mean_tpr, color=color, linewidth=3,
+                   label=f'D={d_value} (AUC={mean_auc:.2f}±{std_auc:.2f})')
         
-        # Create a representative curve by interpolating
-        mean_fpr = np.linspace(0, 1, 100)
-        interp_tprs = []
+        # Plot diagonal line
+        ax.plot([0, 1], [0, 1], 'k--', alpha=0.5)
         
-        for roc_curve in roc_curves:
-            interp_tpr = np.interp(mean_fpr, roc_curve['fpr'], roc_curve['tpr'])
-            interp_tprs.append(interp_tpr)
-        
-        mean_tpr = np.mean(interp_tprs, axis=0)
-        
-        plt.plot(mean_fpr, mean_tpr, color=color, linewidth=3,
-                label=f'D={d_value} (AUC={mean_auc:.3f}±{std_auc:.3f})')
+        ax.set_xlabel('False Positive Rate')
+        ax.set_ylabel('True Positive Rate')
+        ax.set_title(f'ROC Curves: {category_name}')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, alpha=0.3)
     
-    # Plot diagonal line
-    plt.plot([0, 1], [0, 1], 'k--', alpha=0.5, label='Random Classifier')
-    
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('ROC Curves for Different Numbers of Probe Questions')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(filepath, dpi=300, bbox_inches='tight')
     plt.show()
 
 
-def plot_auc_vs_d(results_random: pd.DataFrame, results_stratified: pd.DataFrame, filepath: str):
-    """Plot test AUC vs D for both sampling strategies."""
+def plot_auc_vs_d_comprehensive(all_results: Dict[str, Dict], filepath: str):
+    """Plot AUC vs D for all probe types on same plot with jittered x-values."""
     
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 8))
     
-    # Plot random sampling
-    plt.errorbar(results_random['D'], results_random['mean_auc'], 
-                yerr=results_random['std_auc'], label='Random', marker='o')
+    # Color map for different categories
+    colors = plt.cm.tab10(np.linspace(0, 1, len(all_results)))
     
-    # Plot stratified sampling if provided
-    if results_stratified is not None:
-        plt.errorbar(results_stratified['D'], results_stratified['mean_auc'], 
-                    yerr=results_stratified['std_auc'], label='Stratified', marker='s')
+    for idx, (category_name, category_data) in enumerate(all_results.items()):
+        results_df = category_data['results']
+        color = colors[idx]
+        
+        # Add small jitter to x-values to separate overlapping points
+        jitter = (idx - len(all_results)/2) * 0.05
+        x_values = results_df['D'] + jitter
+        
+        plt.errorbar(x_values, results_df['mean_auc'], 
+                    yerr=results_df['std_auc'], 
+                    label=category_name, 
+                    marker='o', 
+                    alpha=0.8,
+                    color=color,
+                    linewidth=2,
+                    markersize=6)
     
     plt.xlabel('Number of Probe Questions (D)')
     plt.ylabel('Test AUC')
-    plt.title('Model Performance vs Number of Probe Questions')
+    plt.title('Model Performance vs Number of Probe Questions by Category')
     plt.legend()
     plt.grid(True, alpha=0.3)
+    plt.ylim(0.45, 1.05)  # Set reasonable y-limits for AUC
     plt.savefig(filepath, dpi=300, bbox_inches='tight')
     plt.show()
 
@@ -458,30 +470,15 @@ def plot_probe_type_analysis(data: pd.DataFrame, filepath: str):
     return significance_results
 
 
-def experiment_single_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_value: int,
-                       n_samples: int = 10, strategy: str = 'random', 
-                       target_types: list = None) -> Dict[str, float]:
-    """Run experiment for single D value with multiple probe samplings."""
+def get_probe_type_info(probe_df: pd.DataFrame) -> Dict[str, Dict]:
+    """Get information about each probe type."""
+    probe_type_info = {}
     
-    print(f"  Sampling {n_samples} different sets of {d_value} probes...")
+    for probe_type in probe_df['probe_type'].unique():
+        type_probes = probe_df[probe_df['probe_type'] == probe_type]
+        probe_type_info[probe_type] = {
+            'count': len(type_probes),
+            'indices': type_probes['probe_question_idx'].values
+        }
     
-    sample_aucs = []  # Store mean AUC for each probe selection
-    all_roc_curves = []  # Store ROC curves for plotting
-    
-    for sample_idx in range(n_samples):
-        # Sample probe questions
-        probe_indices = sample_probe_questions(d_value, probe_df, strategy, target_types)
-        
-        # Run CV experiment for this probe selection
-        cv_results = run_cv_experiment(data, probe_indices)
-        
-        # Store the mean AUC across folds for this probe selection
-        sample_aucs.append(cv_results['mean_auc'])
-        all_roc_curves.extend(cv_results['roc_curves'])
-    
-    return {
-        'mean_auc': np.mean(sample_aucs),      # Mean across probe selections
-        'std_auc': np.std(sample_aucs),        # Std across probe selections  
-        'sample_aucs': sample_aucs,            # Individual results for ANOVA later
-        'roc_curves': all_roc_curves           # All ROC curves for plotting
-    }
+    return probe_type_info

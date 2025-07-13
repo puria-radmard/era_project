@@ -11,7 +11,7 @@ def generate_synthetic_probes(n_probes: int = 20) -> pd.DataFrame:
     
     # Create probe questions with different discrimination levels
     # discrimination_strength ranges from 0 (pure noise) to 1 (perfect discrimination)
-    discrimination_strengths = np.linspace(0.0, 0.8, n_probes)
+    discrimination_strengths = np.linspace(0.0, 0.5, n_probes)
     
     probes = []
     for i, strength in enumerate(discrimination_strengths):

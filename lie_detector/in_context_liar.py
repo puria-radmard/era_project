@@ -8,10 +8,10 @@ import torch
 from typing import List
 import random
 
-from model.load import load_model
+# Assuming these are imported from your codebase
+from model.base import load_model
 from util.elicit import elicit_next_token_probs
 
-# Initialize your model and config (adjust as needed)
 chat_wrapper = load_model("meta-llama/Llama-3.1-8B-Instruct", device='auto')
 
 # 1. Load original answers dataframe
@@ -19,13 +19,12 @@ print("Loading original answers...")
 original_answers_df = pd.read_csv('results/lie_detector/questions_1000_all.csv')
 
 # 2. Load probe results dataframe  
-prompt_index = 4
-probe_results_df = pd.read_csv(f'results/lie_detector/questions_1000_probe_prompt{prompt_index}.csv')
+probe_results_df = pd.read_csv('results/lie_detector/questions_1000_probe_prompt4.csv')
 
 # 3. Filter original_answers_df to prompt_idx=4 and question_idx in probe data
 valid_question_ids = set(probe_results_df['question_idx'].unique())
 filtered_answers_df = original_answers_df[
-    (original_answers_df['prompt_idx'] == prompt_index) & 
+    (original_answers_df['prompt_idx'] == 4) & 
     (original_answers_df['question_idx'].isin(valid_question_ids))
 ].copy()
 
@@ -52,19 +51,21 @@ knowledge_answers = filtered_answers_df['knowledge_answer'].tolist()
 # Remove trailing periods if present
 knowledge_answers_clean = [ans.rstrip('.') if ans.endswith('.') else ans for ans in knowledge_answers]
 
-# Tokenize knowledge answers and filter to single-token answers only
-knowledge_token_data = []
-for i, ans in enumerate(knowledge_answers_clean):
+# Tokenize knowledge answers to get first token ID for each
+knowledge_token_ids = []
+for ans in knowledge_answers_clean:
     tokens = chat_wrapper.tokenizer.encode(ans, add_special_tokens=False)
-    if len(tokens) == 1:  # Only keep single-token answers
-        knowledge_token_data.append((i, tokens[0]))
+    if tokens:
+        knowledge_token_ids.append(tokens[0])  # Take first token
+    else:
+        knowledge_token_ids.append(None)  # Skip if no tokens
 
-# Filter to only questions with single-token knowledge answers
-valid_indices = [item[0] for item in knowledge_token_data]
-knowledge_token_ids = [item[1] for item in knowledge_token_data]
+# Remove entries with no valid tokens
+valid_indices = [i for i, token_id in enumerate(knowledge_token_ids) if token_id is not None]
 valid_qa_pairs = [valid_qa_pairs[i] for i in valid_indices]
+knowledge_token_ids = [knowledge_token_ids[i] for i in valid_indices]
 
-print(f"Questions with single-token knowledge answers: {len(valid_qa_pairs)}")
+print(f"Valid questions after tokenization: {len(valid_qa_pairs)}")
 
 # Context lengths to test
 context_lengths = [0, 1, 2, 5, 10, 15, 20]
@@ -83,8 +84,6 @@ for N in context_lengths:
     
     for sample_idx in range(n_samples):
         print(f"  Sample {sample_idx + 1}/{n_samples}")
-
-        import pdb; pdb.set_trace()
         
         # Sample N probe questions and random yes/no answers
         if N > 0:
@@ -154,7 +153,6 @@ plt.title('Effect of In-Context Probe Questions on Knowledge Answer Probability'
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig('results/lie_detector/context_effect_analysis.png', dpi=300, bbox_inches='tight')
-plt.show()
 
 # Save detailed results
 results_df = pd.DataFrame({

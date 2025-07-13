@@ -1,5 +1,9 @@
-from model.base import *
-from util.question import *
+import torch
+import string
+from transformers.cache_utils import DynamicCache
+from typing import Union, List, Optional, Dict
+from model.base import ChatTemplateWrapper
+from util.question import QuestionConfig
 import torch.nn.functional as F
 
 
@@ -72,8 +76,6 @@ def get_choice_token_logits_from_token_ids(
             choice_probs[:, choice_idx] += probs[:, -1, token_id]
     
     return choice_probs
-
-
 
 
 def elicit_mcq_answer(
@@ -286,7 +288,6 @@ def elicit_freeform_answer(
     return cleaned_texts
 
 
-
 def elicit_formatted_answer(
     *_,
     chat_wrapper: ChatTemplateWrapper,
@@ -356,3 +357,121 @@ def elicit_formatted_answer(
     cleaned_texts = generation_result["generated_texts"]
     
     return cleaned_texts
+
+
+def elicit_next_token_probs(
+    *_,
+    chat_wrapper: ChatTemplateWrapper,
+    questions: List[str],
+    system_prompt: str,
+    in_context_questions: Optional[List[List[str]]] = None,
+    in_context_answers: Optional[List[List[str]]] = None,
+    shared_in_context_questions: Optional[List[str]] = None,
+    shared_in_context_answers: Optional[List[str]] = None,
+    question_template: Optional[str] = None,
+    prefiller: Optional[str] = None
+) -> Dict[str, torch.Tensor]:
+    """
+    Generate next token probability distributions for a batch of questions with in-context examples.
+    
+    Args:
+        chat_wrapper: The chat wrapper containing model and tokenizer
+        questions: List of questions (batch)
+        config: Configuration object
+        system_prompt: System prompt to use
+        in_context_questions: List of in-context question lists, one per question
+        in_context_answers: List of in-context answer lists, one per question  
+        shared_in_context_questions: Shared in-context questions for all questions
+        shared_in_context_answers: Shared in-context answers for all questions
+        question_template: Optional template to format questions (defaults to using questions directly)
+        prefiller: Optional prefiller text to add before model generation
+        
+    Returns:
+        Dictionary containing:
+            - "logits": Raw logits tensor of shape [batch_size, vocab_size]
+            - "probs": Probability distribution tensor of shape [batch_size, vocab_size]
+            
+    Example:
+        >>> chat_wrapper = load_model("meta-llama/Llama-2-7b-chat-hf")
+        >>> config = QuestionConfig()
+        >>> questions = ["What is 2+2?", "What color is the sky?"]
+        >>> shared_questions = ["What is 1+1?", "What color is grass?"]
+        >>> shared_answers = ["2", "green"]
+        >>> result = elicit_next_token_probs(
+        ...     chat_wrapper, questions, config, "Answer the question.",
+        ...     shared_in_context_questions=shared_questions,
+        ...     shared_in_context_answers=shared_answers
+        ... )
+        >>> next_token_probs = result["probs"]  # [2, vocab_size] tensor
+    """
+    if not questions:
+        raise ValueError("Questions list cannot be empty")
+
+    # Validate in-context arguments
+    if shared_in_context_answers is not None:
+        assert in_context_questions is None and in_context_answers is None
+        assert shared_in_context_questions is not None
+        if len(shared_in_context_questions) != len(shared_in_context_answers):
+            raise ValueError("Shared in-context questions and answers must have same length")
+    
+    if in_context_answers is not None:
+        assert shared_in_context_questions is None and shared_in_context_answers is None
+        assert in_context_questions is not None
+        if len(in_context_questions) != len(questions):
+            raise ValueError("Number of in-context question lists must match number of questions")
+        if len(in_context_answers) != len(questions):
+            raise ValueError("Number of in-context answer lists must match number of questions")
+        # Validate each question has matching QA pairs
+        for i, (iq_list, ia_list) in enumerate(zip(in_context_questions, in_context_answers)):
+            if len(iq_list) != len(ia_list):
+                raise ValueError(f"Question {i}: in-context questions and answers must have same length")
+    
+    # Format chats
+    formatted_chats = []
+    
+    for iq, question in enumerate(questions):
+        
+        # Format the question with template if provided
+        if question_template is not None:
+            full_question = question_template.format(question=question)
+        else:
+            full_question = question
+
+        # Determine in-context examples for this question
+        if in_context_answers is not None:
+            this_in_context_questions = in_context_questions[iq]
+            this_in_context_answers = in_context_answers[iq]
+        elif shared_in_context_answers is not None:
+            this_in_context_questions = shared_in_context_questions
+            this_in_context_answers = shared_in_context_answers
+        else:
+            this_in_context_questions = None
+            this_in_context_answers = None
+        
+        # Format with chat template
+        formatted_chat = chat_wrapper.format_chat(
+            system_prompt=system_prompt,
+            user_message=full_question,
+            prefiller=prefiller,
+            in_context_questions=this_in_context_questions,
+            in_context_answers=this_in_context_answers,
+        )
+            
+        formatted_chats.append(formatted_chat)
+
+    # Get model outputs using the chat wrapper
+    outputs = chat_wrapper.forward(
+        chats=formatted_chats,
+        use_cache=False,
+    )
+    
+    # Get logits for the last token (where the next token should be predicted)
+    last_token_logits = outputs.logits[:, -1, :]  # [batch_size, vocab_size]
+    
+    # Convert to probabilities
+    next_token_probs = F.softmax(last_token_logits, dim=-1)
+    
+    return {
+        "logits": last_token_logits,
+        "probs": next_token_probs
+    }
