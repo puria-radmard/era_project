@@ -89,22 +89,15 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
                            test_questions: np.ndarray, probe_indices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Extract X, y matrices for train/test from selected probes/questions."""
     
-    print(f"Debug: Training questions: {len(train_questions)}, Test questions: {len(test_questions)}")
-    print(f"Debug: Selected probe indices: {probe_indices}")
-    print(f"Debug: Overlap between train/test: {len(set(train_questions) & set(test_questions))}")
     
     # Filter data for selected probes
     probe_data = data[data['probe_question_idx'].isin(probe_indices)]
-    print(f"Debug: Probe data shape after filtering: {probe_data.shape}")
     
     # Prepare training data
     train_data = probe_data[probe_data['question_idx'].isin(train_questions)]
-    print(f"Debug: Training data shape: {train_data.shape}")
-    print(f"Debug: Unique (question_idx, truth) pairs in training: {len(train_data[['question_idx', 'truth']].drop_duplicates())}")
     
     # Check if we have complete data
     expected_train_rows = len(train_questions) * 2 * len(probe_indices)  # questions × truth values × probes
-    print(f"Debug: Expected training rows: {expected_train_rows}, Actual: {len(train_data)}")
     
     train_pivot = train_data.pivot_table(
         index=['question_idx', 'truth'], 
@@ -113,9 +106,6 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
         fill_value=np.nan  # Changed from 0 to NaN to detect missing data
     )
     
-    print(f"Debug: Training pivot shape: {train_pivot.shape}")
-    print(f"Debug: Missing values in training pivot: {train_pivot.isna().sum().sum()}")
-    print(f"Debug: Training log odds range: [{train_pivot.min().min():.3f}, {train_pivot.max().max():.3f}]")
     
     # Check for any NaN values and handle them
     if train_pivot.isna().any().any():
@@ -127,10 +117,8 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
     
     # Prepare test data
     test_data = probe_data[probe_data['question_idx'].isin(test_questions)]
-    print(f"Debug: Test data shape: {test_data.shape}")
     
     expected_test_rows = len(test_questions) * 2 * len(probe_indices)
-    print(f"Debug: Expected test rows: {expected_test_rows}, Actual: {len(test_data)}")
     
     test_pivot = test_data.pivot_table(
         index=['question_idx', 'truth'], 
@@ -139,9 +127,6 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
         fill_value=np.nan
     )
     
-    print(f"Debug: Test pivot shape: {test_pivot.shape}")
-    print(f"Debug: Missing values in test pivot: {test_pivot.isna().sum().sum()}")
-    print(f"Debug: Test log odds range: [{test_pivot.min().min():.3f}, {test_pivot.max().max():.3f}]")
     
     if test_pivot.isna().any().any():
         print("Warning: Missing values found in test data!")
@@ -150,10 +135,6 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
     X_test = test_pivot.values
     y_test = test_pivot.index.get_level_values('truth').values
     
-    print(f"Debug: Final shapes - X_train: {X_train.shape}, y_train: {y_train.shape}")
-    print(f"Debug: Final shapes - X_test: {X_test.shape}, y_test: {y_test.shape}")
-    print(f"Debug: y_train distribution: {np.bincount(y_train)}")
-    print(f"Debug: y_test distribution: {np.bincount(y_test)}")
     
     return X_train, y_train, X_test, y_test
 
@@ -475,3 +456,32 @@ def plot_probe_type_analysis(data: pd.DataFrame, filepath: str):
         print(f"{result['probe_idx']:5d} | {result['p_value']:7.4f} | {sig_marker}")
     
     return significance_results
+
+
+def experiment_single_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_value: int,
+                       n_samples: int = 10, strategy: str = 'random', 
+                       target_types: list = None) -> Dict[str, float]:
+    """Run experiment for single D value with multiple probe samplings."""
+    
+    print(f"  Sampling {n_samples} different sets of {d_value} probes...")
+    
+    sample_aucs = []  # Store mean AUC for each probe selection
+    all_roc_curves = []  # Store ROC curves for plotting
+    
+    for sample_idx in range(n_samples):
+        # Sample probe questions
+        probe_indices = sample_probe_questions(d_value, probe_df, strategy, target_types)
+        
+        # Run CV experiment for this probe selection
+        cv_results = run_cv_experiment(data, probe_indices)
+        
+        # Store the mean AUC across folds for this probe selection
+        sample_aucs.append(cv_results['mean_auc'])
+        all_roc_curves.extend(cv_results['roc_curves'])
+    
+    return {
+        'mean_auc': np.mean(sample_aucs),      # Mean across probe selections
+        'std_auc': np.std(sample_aucs),        # Std across probe selections  
+        'sample_aucs': sample_aucs,            # Individual results for ANOVA later
+        'roc_curves': all_roc_curves           # All ROC curves for plotting
+    }

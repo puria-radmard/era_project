@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from util.lie_detector import (
     load_and_preprocess_data,
-    run_cv_experiment,
+    experiment_single_d,
     sample_probe_questions,
     plot_auc_vs_d,
     plot_probe_type_analysis,
@@ -14,8 +14,9 @@ from util.lie_detector import (
 
 
 def experiment_vary_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_values: list,
-                     strategy: str = 'random', target_types: list = None) -> tuple:
-    """Run experiments across different D values, return AUC vs D and ROC curve data."""
+                     n_samples: int = 10, strategy: str = 'random', 
+                     target_types: list = None) -> tuple:
+    """Run experiments across different D values with multiple probe samplings per D."""
     
     results = []
     roc_data_dict = {}
@@ -23,21 +24,26 @@ def experiment_vary_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_values: list
     for d in d_values:
         print(f"Running experiment with D={d}, strategy={strategy}")
         
-        # Sample probe questions
-        probe_indices = sample_probe_questions(d, probe_df, strategy, target_types)
-        
-        # Run CV experiment
-        cv_results = run_cv_experiment(data, probe_indices)
+        # Run experiment with multiple probe samplings for this D
+        d_results = experiment_single_d(
+            data=data,
+            probe_df=probe_df,
+            d_value=d,
+            n_samples=n_samples,
+            strategy=strategy,
+            target_types=target_types
+        )
         
         results.append({
             'D': d,
             'strategy': strategy,
-            'mean_auc': cv_results['mean_auc'],
-            'std_auc': cv_results['std_auc']
+            'mean_auc': d_results['mean_auc'],
+            'std_auc': d_results['std_auc'],
+            'sample_aucs': d_results['sample_aucs']  # Store for potential ANOVA
         })
         
         # Store ROC curve data
-        roc_data_dict[d] = cv_results['roc_curves']
+        roc_data_dict[d] = d_results['roc_curves']
     
     return pd.DataFrame(results), roc_data_dict
 
@@ -45,7 +51,6 @@ def experiment_vary_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_values: list
 def main_pipeline():
     """Execute full experimental pipeline."""
     
-    # Test ROC/AUC implementation first
     prefix = sys.argv[1]
     
     print("Loading and preprocessing data...")
@@ -110,20 +115,25 @@ def main_pipeline():
     
     print(f"\nTesting D values: {d_values}")
     
-    # Experiment: Random sampling
+    # Experiment: Random sampling with multiple probe selections per D
     print("\n" + "="*50)
     print("EXPERIMENT: Random Probe Sampling")
     print("="*50)
+    print("Note: For each D, sampling multiple different probe sets to get uncertainty bounds")
+    
+    n_samples = 20  # Number of different probe selections per D value
+    print(f"Using {n_samples} different probe selections per D value")
     
     results_random, roc_data = experiment_vary_d(
         data=data,
         probe_df=probe_df,
         d_values=d_values,
+        n_samples=n_samples,
         strategy='random'
     )
     
     print("Random sampling results:")
-    print(results_random)
+    print(results_random[['D', 'mean_auc', 'std_auc']])
     
     # Plot results
     print("\n" + "="*50)
@@ -135,9 +145,10 @@ def main_pipeline():
     
     # Summary statistics
     print("\nSummary:")
-    print(f"Best random AUC: {results_random['mean_auc'].max():.3f} at D={results_random.loc[results_random['mean_auc'].idxmax(), 'D']}")
+    print(f"Best random AUC: {results_random['mean_auc'].max():.3f} ± {results_random.loc[results_random['mean_auc'].idxmax(), 'std_auc']:.3f} at D={results_random.loc[results_random['mean_auc'].idxmax(), 'D']}")
     print(f"Training set size: ~{100/5:.0f}% of data (1/{5} of questions)")
     print(f"Test set size: ~{100*4/5:.0f}% of data ({4}/{5} of questions)")
+    print(f"Each point represents mean ± std across {n_samples} different probe selections")
     
     # Save results
     results_random.to_csv(f'results/lie_detector/{prefix}results_random_sampling.csv', index=False)

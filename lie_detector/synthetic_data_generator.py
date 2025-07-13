@@ -11,7 +11,7 @@ def generate_synthetic_probes(n_probes: int = 20) -> pd.DataFrame:
     
     # Create probe questions with different discrimination levels
     # discrimination_strength ranges from 0 (pure noise) to 1 (perfect discrimination)
-    discrimination_strengths = np.linspace(0.0, 1.0, n_probes)
+    discrimination_strengths = np.linspace(0.0, 0.8, n_probes)
     
     probes = []
     for i, strength in enumerate(discrimination_strengths):
@@ -45,7 +45,7 @@ def generate_synthetic_responses(n_questions: int, n_probes: int,
                     
                     # Apply signal using sigmoid-like transformation
                     logit_base = np.log(base_prob / (1 - base_prob + 1e-10))
-                    logit_adjusted = logit_base + signal * 3  # Scale signal
+                    logit_adjusted = logit_base + signal * 2  # Scale signal
                     prob_yes = 1 / (1 + np.exp(-logit_adjusted))
                 else:
                     # Pure noise case
@@ -55,7 +55,7 @@ def generate_synthetic_responses(n_questions: int, n_probes: int,
                 prob_yes = np.clip(prob_yes, 1e-6, 1 - 1e-6)
                 
                 # Generate prob_no (mostly 1 - prob_yes with small noise)
-                prob_no = 1 - prob_yes + np.random.normal(0, 0.01)
+                prob_no = 1 - prob_yes + np.random.normal(0, 0.05)
                 prob_no = np.clip(prob_no, 1e-6, 1 - 1e-6)
                 
                 # Normalize to ensure they don't sum to exactly 1 (realistic)
@@ -127,29 +127,6 @@ def create_synthetic_dataset(n_questions: int = 100, n_probes: int = 20,
     return probes_path, results_path
 
 
-def analyze_expected_performance(n_questions: int = 100, n_probes: int = 20) -> None:
-    """Analyze expected AUC performance for different probe subsets."""
-    
-    discrimination_strengths = np.linspace(0.0, 1.0, n_probes)
-    
-    print("\nExpected performance analysis:")
-    print("If we select the best probes, we expect:")
-    
-    # Simulate different D values
-    d_values = [1, 2, 5, 10, 15, 20]
-    
-    for d in d_values:
-        if d <= n_probes:
-            # Best possible probes (highest discrimination)
-            best_strengths = discrimination_strengths[-d:]
-            avg_strength = np.mean(best_strengths)
-            
-            # Rough AUC estimate (this is just heuristic)
-            expected_auc = 0.5 + avg_strength * 0.5
-            
-            print(f"  D={d:2d}: avg_strength={avg_strength:.3f} → expected_AUC≈{expected_auc:.3f}")
-
-
 if __name__ == "__main__":
     # Generate synthetic data with progressive discrimination from 0 to 1
     probes_path, results_path = create_synthetic_dataset(
@@ -157,9 +134,6 @@ if __name__ == "__main__":
         n_probes=20,
         output_dir='synthetic_data'
     )
-    
-    # Analyze expected performance
-    analyze_expected_performance(100, 20)
     
     print(f"\n" + "="*60)
     print("USAGE:")
