@@ -4,13 +4,19 @@ import os
 from model.load import load_model
 
 from tqdm import tqdm
+from util.util import YamlConfig
 
-# Configuration
-BATCH_SIZE = 32
-SYSTEM_PROMPT = "Do not provide explanations to any answers."
+import sys
 
-# Create results directory if it doesn't exist
-os.makedirs('results/lie_detector', exist_ok=True)
+config_path = sys.argv[1]
+args = YamlConfig(config_path)
+
+batch_size = args.batch_size
+system_prompt = args.system_prompt
+questions_data_name = args.questions_data_name
+model_name = args.model_name
+save_path = args.save_path
+
 
 # Load prompts
 with open('data/prompts.json', 'r') as f:
@@ -20,37 +26,37 @@ truth_prompts = prompts['truth_prompts']
 lie_prompts = prompts['lie_prompts']
 
 # Load questions
-with open('data/questions_1000_all.json', 'r') as f:
+with open(f'data/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
 
 qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) for idx in range(len(question_data['question']))]
 assert set([len(qa[1].split()) for qa in qa_pairs]) == {1}
 
 # Load model
-chat_wrapper = load_model("meta-llama/Llama-3.1-8B-Instruct", device='auto')
+chat_wrapper = load_model(model_name, device='auto')
 
 # Initialize results list
 results = []
 
 # Process in batches
-for batch_start in tqdm(range(0, len(qa_pairs), BATCH_SIZE)):
-    batch_end = min(batch_start + BATCH_SIZE, len(qa_pairs))
+for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
+    batch_end = min(batch_start + batch_size, len(qa_pairs))
     batch_qa_pairs = qa_pairs[batch_start:batch_end]
     batch_indices = list(range(batch_start, batch_end))
     
-    print(f"Processing batch {batch_start//BATCH_SIZE + 1}/{(len(qa_pairs) + BATCH_SIZE - 1)//BATCH_SIZE}")
+    print(f"Processing batch {batch_start//batch_size + 1}/{(len(qa_pairs) + batch_size - 1)//batch_size}")
     
     # Generate knowledge check responses (only once per batch)
     formatted_check_knowledge_chats = [
         chat_wrapper.format_chat(
-            system_prompt=SYSTEM_PROMPT,
-            user_message=qa_pair[0]
+            system_prompt=system_prompt,
+            user_message=qa_pair[0],
+            prefiller=""
         ) for qa_pair in batch_qa_pairs
     ]
     
-    check_knowledge_answers = chat_wrapper.generate(
+    check_knowledge_answers = chat_wrapper.generate_parallel(
         chats=formatted_check_knowledge_chats,
-        past_key_values=None,
         max_new_tokens=1024,
         temperature=None,
         do_sample=False,
@@ -65,14 +71,14 @@ for batch_start in tqdm(range(0, len(qa_pairs), BATCH_SIZE)):
         # Generate truth responses
         formatted_truth_chats = [
             chat_wrapper.format_chat(
-                system_prompt=SYSTEM_PROMPT,
-                user_message=f'{truth_prompt} {qa_pair[0]}'
+                system_prompt=system_prompt,
+                user_message=f'{truth_prompt} {qa_pair[0]}',
+                prefiller=""
             ) for qa_pair in batch_qa_pairs
         ]
         
-        truth_answers = chat_wrapper.generate(
+        truth_answers = chat_wrapper.generate_parallel(
             chats=formatted_truth_chats,
-            past_key_values=None,
             max_new_tokens=1024,
             temperature=None,
             do_sample=False,
@@ -83,14 +89,14 @@ for batch_start in tqdm(range(0, len(qa_pairs), BATCH_SIZE)):
         # Generate lie responses
         formatted_lie_chats = [
             chat_wrapper.format_chat(
-                system_prompt=SYSTEM_PROMPT,
-                user_message=f'{lie_prompt} {qa_pair[0]}'
+                system_prompt=system_prompt,
+                user_message=f'{lie_prompt} {qa_pair[0]}',
+                prefiller=""
             ) for qa_pair in batch_qa_pairs
         ]
         
-        lie_answers = chat_wrapper.generate(
+        lie_answers = chat_wrapper.generate_parallel(
             chats=formatted_lie_chats,
-            past_key_values=None,
             max_new_tokens=1024,
             temperature=None,
             do_sample=False,
@@ -103,6 +109,10 @@ for batch_start in tqdm(range(0, len(qa_pairs), BATCH_SIZE)):
             batch_qa_pairs, check_knowledge_responses, truth_responses, lie_responses
         )):
             correct_answer = qa_pair[1].lower()
+
+            knowledge_resp = knowledge_resp.removesuffix(".")
+            truth_resp = truth_resp.removesuffix(".")
+            lie_resp = lie_resp.removesuffix(".")
             
             knows_answer = correct_answer in knowledge_resp.lower()
             told_truth = correct_answer in truth_resp.lower()
@@ -121,7 +131,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), BATCH_SIZE)):
         
         # Save DataFrame after each prompt iteration
         df = pd.DataFrame(results)
-        df.to_csv('results/lie_detector/questions_1000_all.csv', index=False)
+        df.to_csv(f'{save_path}/initial_answers/{questions_data_name}.csv', index=False)
         
         # Print summary statistics after each prompt iteration
         print(f"\n  === Summary after prompt pair {prompt_idx + 1} ===")
@@ -167,7 +177,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), BATCH_SIZE)):
 
 # Final summary
 print(f"\n🎉 FINAL RESULTS 🎉")
-print(f"Results saved to results/lie_detector/questions_1000_all.csv")
+print(f"Results saved to {save_path}/initial_answers/{questions_data_name}.csv")
 print(f"Total rows: {len(df)}")
 
 print(f"\nFinal Summary Statistics:")

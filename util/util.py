@@ -1,4 +1,5 @@
 import random
+import yaml
 
 def random_sample_excluding_indices(items, k, exclude_indices):
     """
@@ -18,3 +19,28 @@ def random_sample_excluding_indices(items, k, exclude_indices):
         raise ValueError("Not enough items to sample after excluding indices.")
     chosen_indices = random.sample(available_indices, k)
     return [items[i] for i in chosen_indices]
+
+
+class YamlConfig:
+    def __init__(self, path):
+        with open(path, 'r') as f:
+            config = yaml.safe_load(f)
+        self._set_attrs(config)
+
+    def _set_attrs(self, config):
+        for key, value in config.items():
+            if isinstance(value, dict):
+                value = YamlConfig._from_dict(value)
+            setattr(self, key, value)
+
+    @staticmethod
+    def _from_dict(d):
+        obj = type('YamlConfigSection', (), {})()
+        for key, value in d.items():
+            if isinstance(value, dict):
+                value = YamlConfig._from_dict(value)
+            setattr(obj, key, value)
+        return obj
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)

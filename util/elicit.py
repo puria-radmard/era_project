@@ -363,7 +363,8 @@ def elicit_next_token_probs(
     *_,
     chat_wrapper: ChatTemplateWrapper,
     questions: List[str],
-    system_prompt: str,
+    system_prompt: Optional[str] = None,
+    cache_data: Optional[Dict[str, Union[DynamicCache, torch.Tensor]]] = None,
     in_context_questions: Optional[List[List[str]]] = None,
     in_context_answers: Optional[List[List[str]]] = None,
     shared_in_context_questions: Optional[List[str]] = None,
@@ -377,8 +378,8 @@ def elicit_next_token_probs(
     Args:
         chat_wrapper: The chat wrapper containing model and tokenizer
         questions: List of questions (batch)
-        config: Configuration object
-        system_prompt: System prompt to use
+        system_prompt: System prompt to use (ignored if cache_data provided)
+        cache_data: Optional precomputed cache data from create_prompt_cache()
         in_context_questions: List of in-context question lists, one per question
         in_context_answers: List of in-context answer lists, one per question  
         shared_in_context_questions: Shared in-context questions for all questions
@@ -393,12 +394,11 @@ def elicit_next_token_probs(
             
     Example:
         >>> chat_wrapper = load_model("meta-llama/Llama-2-7b-chat-hf")
-        >>> config = QuestionConfig()
         >>> questions = ["What is 2+2?", "What color is the sky?"]
         >>> shared_questions = ["What is 1+1?", "What color is grass?"]
         >>> shared_answers = ["2", "green"]
         >>> result = elicit_next_token_probs(
-        ...     chat_wrapper, questions, config, "Answer the question.",
+        ...     chat_wrapper, questions, "Answer the question.",
         ...     shared_in_context_questions=shared_questions,
         ...     shared_in_context_answers=shared_answers
         ... )
@@ -406,6 +406,10 @@ def elicit_next_token_probs(
     """
     if not questions:
         raise ValueError("Questions list cannot be empty")
+
+    # Validate cache_data and system_prompt
+    if cache_data is None:
+        assert system_prompt is not None
 
     # Validate in-context arguments
     if shared_in_context_answers is not None:
@@ -450,7 +454,7 @@ def elicit_next_token_probs(
         
         # Format with chat template
         formatted_chat = chat_wrapper.format_chat(
-            system_prompt=system_prompt,
+            system_prompt=system_prompt,    # If none, then no problem!
             user_message=full_question,
             prefiller=prefiller,
             in_context_questions=this_in_context_questions,
@@ -462,7 +466,8 @@ def elicit_next_token_probs(
     # Get model outputs using the chat wrapper
     outputs = chat_wrapper.forward(
         chats=formatted_chats,
-        use_cache=False,
+        past_key_values=cache_data["cache"] if cache_data else None,
+        use_cache=cache_data["cache"] is not None if cache_data else False,
     )
     
     # Get logits for the last token (where the next token should be predicted)

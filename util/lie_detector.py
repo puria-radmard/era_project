@@ -94,7 +94,6 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
     # Prepare training data
     train_data = probe_data[probe_data['question_idx'].isin(train_questions)]    
     # Check if we have complete data
-    expected_train_rows = len(train_questions) * 2 * len(probe_indices)  # questions × truth values × probes    
     train_pivot = train_data.pivot_table(
         index=['question_idx', 'truth'], 
         columns='probe_question_idx', 
@@ -241,14 +240,16 @@ def run_cv_experiment(data: pd.DataFrame, probe_indices: np.ndarray, n_folds: in
         # Store ROC curve data
         roc_curves.append({
             'fold': fold_idx,
-            'fpr': results['fpr'],
-            'tpr': results['tpr'],
-            'auc': results['auc']
+            'fpr': results['fpr'].astype(float).tolist(),
+            'tpr': results['tpr'].astype(float).tolist(),
+            'auc': results['auc'].astype(float).tolist(),
+            'n_train': X_train.shape[0],
+            'n_test': X_test.shape[0],
         })
     
     return {
-        'mean_auc': np.mean(aucs),
-        'std_auc': np.std(aucs),
+        'mean_auc': float(np.mean(aucs)),
+        'std_auc': float(np.std(aucs)),
         'aucs': aucs,
         'roc_curves': roc_curves
     }
@@ -346,26 +347,22 @@ def plot_auc_vs_d_comprehensive(all_results: Dict[str, Dict], filepath: str):
     plt.show()
 
 
-def plot_probe_type_analysis(data: pd.DataFrame, filepath: str):
-    """Plot log odds distributions by probe question with statistical significance."""
+def compute_probe_discriminability(data: pd.DataFrame) -> Dict:
+    """Compute discriminability statistics for each probe question."""
     from scipy.stats import ttest_rel
+    import numpy as np
+    from typing import Dict
+    import pandas as pd
     
-    # Get unique probe questions and their text
+    # Get unique probe questions and their info
     probe_info = data[['probe_question_idx', 'probe', 'probe_type']].drop_duplicates().sort_values('probe_question_idx')
-    n_probes = len(probe_info)
     
-    plt.figure(figsize=(max(12, n_probes * 1.5), 10))
+    probe_results = []
+    significant_count = 0
+    effect_sizes = []
     
-    # Create box plot for each probe question
-    ax = sns.boxplot(data=data, x='probe_question_idx', y='log_odds', hue='truth')
-    
-    # Add scatter points overlaid on boxplots
-    sns.stripplot(data=data, x='probe_question_idx', y='log_odds', hue='truth', 
-                  dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
-    
-    # Perform paired t-tests and add significance stars
-    significance_results = []
-    for probe_idx in probe_info['probe_question_idx']:
+    for _, probe_row in probe_info.iterrows():
+        probe_idx = probe_row['probe_question_idx']
         probe_data = data[data['probe_question_idx'] == probe_idx]
         
         # Pivot to get paired data (same question_idx for truth=0 and truth=1)
@@ -377,98 +374,237 @@ def plot_probe_type_analysis(data: pd.DataFrame, filepath: str):
         
         if len(pivot_data) > 1 and 0 in pivot_data.columns and 1 in pivot_data.columns:
             # Paired t-test
-            stat, p_value = ttest_rel(pivot_data[1], pivot_data[0])
-            significance_results.append({
-                'probe_idx': probe_idx,
-                'p_value': p_value,
-                'significant': p_value < 0.05
+            truth_0_values = pivot_data[0].values
+            truth_1_values = pivot_data[1].values
+            stat, p_value = ttest_rel(truth_1_values, truth_0_values)
+            
+            # Calculate statistics
+            mean_truth_0 = np.mean(truth_0_values)
+            mean_truth_1 = np.mean(truth_1_values)
+            std_truth_0 = np.std(truth_0_values, ddof=1)
+            std_truth_1 = np.std(truth_1_values, ddof=1)
+            mean_difference = mean_truth_1 - mean_truth_0
+            
+            # Cohen's d for paired samples: mean_difference / std_of_differences
+            differences = truth_1_values - truth_0_values
+            cohens_d = np.mean(differences) / np.std(differences, ddof=1)
+            
+            probe_results.append({
+                'probe_type': probe_row['probe_type'],
+                'n_pairs': len(pivot_data),
+                'p_value': float(p_value),
+                'test_statistic': float(stat),
+                'significant': float(p_value) < 0.05,
+                'mean_truth_0': float(mean_truth_0),
+                'mean_truth_1': float(mean_truth_1),
+                'std_truth_0': float(std_truth_0),
+                'std_truth_1': float(std_truth_1),
+                'mean_difference': float(mean_difference),
+                'effect_size': float(cohens_d),
+                'abs_mean_difference': float(abs(mean_difference))
             })
             
-            # Add star if significant
             if p_value < 0.05:
-                # Get the position for the star
-                probe_position = list(probe_info['probe_question_idx']).index(probe_idx)
-                max_y = data[data['probe_question_idx'] == probe_idx]['log_odds'].max()
-                plt.text(probe_position, max_y + 0.1, '*', 
-                        ha='center', va='bottom', fontsize=16, fontweight='bold')
+                significant_count += 1
+            effect_sizes.append(abs(cohens_d))
     
-    # Add category braces
-    def add_category_braces(ax, probe_info):
-        # Group consecutive probe indices by probe_type
-        groups = []
-        current_type = None
-        current_start = None
-        
-        for i, (_, row) in enumerate(probe_info.iterrows()):
-            if row['probe_type'] != current_type:
-                if current_type is not None:
-                    groups.append({
-                        'type': current_type,
-                        'start': current_start,
-                        'end': i - 1
-                    })
-                current_type = row['probe_type']
-                current_start = i
-        
-        # Add the last group
-        if current_type is not None:
-            groups.append({
-                'type': current_type,
-                'start': current_start,
-                'end': len(probe_info) - 1
-            })
-        
-        # Draw braces and labels
-        y_min = ax.get_ylim()[0]
-        brace_height = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.08
-        
-        for group in groups:
-            start_x = group['start'] - 0.4
-            end_x = group['end'] + 0.4
-            center_x = (start_x + end_x) / 2
-            
-            # Draw horizontal line
-            ax.plot([start_x, end_x], [y_min - brace_height, y_min - brace_height], 
-                   'k-', linewidth=1)
-            
-            # Draw vertical lines at ends
-            ax.plot([start_x, start_x], [y_min - brace_height * 0.5, y_min - brace_height], 
-                   'k-', linewidth=1)
-            ax.plot([end_x, end_x], [y_min - brace_height * 0.5, y_min - brace_height], 
-                   'k-', linewidth=1)
-            
-            # Add category label
-            ax.text(center_x, y_min - brace_height * 2, group['type'], 
-                   ha='center', va='top', fontsize=10, fontweight='bold')
+    return {
+        'probe_results': probe_results,
+        'overall_stats': {
+            'total_probes': len(probe_results),
+            'significant_probes': significant_count,
+            'mean_effect_size': float(np.mean(effect_sizes) if effect_sizes else 0)
+        }
+    }
+
+
+def add_category_braces(ax, probe_info):
+    """Add category braces below the x-axis to group probe types."""
+    # Group consecutive probe indices by probe_type
+    groups = []
+    current_type = None
+    current_start = None
     
-    add_category_braces(ax, probe_info)
+    for i, (_, row) in enumerate(probe_info.iterrows()):
+        if row['probe_type'] != current_type:
+            if current_type is not None:
+                groups.append({
+                    'type': current_type,
+                    'start': current_start,
+                    'end': i - 1
+                })
+            current_type = row['probe_type']
+            current_start = i
     
-    plt.title('Log Odds Distribution by Probe Question\n(* indicates p<0.05 for paired t-test)')
-    plt.xlabel('Probe Question Index')
-    plt.ylabel('Log Odds')
-    plt.xticks(rotation=45)
+    # Add the last group
+    if current_type is not None:
+        groups.append({
+            'type': current_type,
+            'start': current_start,
+            'end': len(probe_info) - 1
+        })
+    
+    # Draw braces and labels
+    y_min = ax.get_ylim()[0]
+    brace_height = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.08
+    
+    for group in groups:
+        start_x = group['start'] - 0.4
+        end_x = group['end'] + 0.4
+        center_x = (start_x + end_x) / 2
+        
+        # Draw horizontal line
+        ax.plot([start_x, end_x], [y_min - brace_height, y_min - brace_height], 
+               'k-', linewidth=1)
+        
+        # Draw vertical lines at ends
+        ax.plot([start_x, start_x], [y_min - brace_height * 0.5, y_min - brace_height], 
+               'k-', linewidth=1)
+        ax.plot([end_x, end_x], [y_min - brace_height * 0.5, y_min - brace_height], 
+               'k-', linewidth=1)
+        
+        # Add category label
+        ax.text(center_x, y_min - brace_height * 2, group['type'], 
+               ha='center', va='top', fontsize=10, fontweight='bold')
+
+
+def add_significance_stars(ax, data, probe_info, discriminability_results):
+    """Add significance stars above boxplots for significant probes."""
+    for i, probe_result in enumerate(discriminability_results['probe_results']):
+        if probe_result['significant']:
+            probe_idx = probe_info.iloc[i]['probe_question_idx']
+            max_y = data[data['probe_question_idx'] == probe_idx]['log_odds'].max()
+            plt.text(i, max_y + 0.1, '*', 
+                    ha='center', va='bottom', fontsize=16, fontweight='bold')
+
+
+def create_probe_boxplot(data: pd.DataFrame, probe_info: pd.DataFrame):
+    """Create the main boxplot with stripplot overlay."""
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    
+    # Create box plot for each probe question
+    ax = sns.boxplot(data=data, x='probe_question_idx', y='log_odds', hue='truth')
+    
+    # Add scatter points overlaid on boxplots
+    sns.stripplot(data=data, x='probe_question_idx', y='log_odds', hue='truth', 
+                  dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
+    
+    return ax
+
+
+def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_results: Dict):
+    """Create second subplot with probes ordered by discriminability, centered at 0."""
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    
+    # Get probe info
+    probe_info = data[['probe_question_idx', 'probe', 'probe_type']].drop_duplicates().sort_values('probe_question_idx')
+    
+    # Create list of (probe_question_idx, discriminability) and sort by discriminability
+    probe_discriminability = []
+    for i, (_, probe_row) in enumerate(probe_info.iterrows()):
+        probe_idx = probe_row['probe_question_idx']
+        discriminability = discriminability_results['probe_results'][i]['abs_mean_difference']
+        probe_discriminability.append((probe_idx, discriminability))
+    
+    # Sort by discriminability (least to most)
+    probe_discriminability.sort(key=lambda x: x[1])
+    
+    # Create mapping from probe_question_idx to new ordered position
+    probe_idx_to_new_pos = {probe_idx: new_pos for new_pos, (probe_idx, _) in enumerate(probe_discriminability)}
+    
+    # Calculate overall mean for each probe (across truth and lie)
+    probe_means = {}
+    for _, row in probe_info.iterrows():
+        probe_idx = row['probe_question_idx']
+        probe_data = data[data['probe_question_idx'] == probe_idx]
+        probe_means[probe_idx] = probe_data['log_odds'].mean()
+    
+    # Create transformed dataset
+    transformed_data = []
+    for _, row in data.iterrows():
+        probe_idx = row['probe_question_idx']
+        new_pos = probe_idx_to_new_pos[probe_idx]
+        
+        # Delta from probe's overall mean
+        delta_log_odds = row['log_odds'] - probe_means[probe_idx]
+        
+        transformed_data.append({
+            'ordered_probe_idx': new_pos,
+            'delta_log_odds': delta_log_odds,
+            'truth': row['truth'],
+            'question_idx': row['question_idx']
+        })
+    
+    transformed_df = pd.DataFrame(transformed_data)
+    
+    # Create the plot
+    ax = sns.boxplot(data=transformed_df, x='ordered_probe_idx', y='delta_log_odds', hue='truth')
+    sns.stripplot(data=transformed_df, x='ordered_probe_idx', y='delta_log_odds', hue='truth', 
+                  dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
+    
+    # Add horizontal line at y=0
+    ax.axhline(y=0, color='black', linestyle='--', alpha=0.5)
+    
+    return ax
+
+
+def plot_probe_type_analysis(data: pd.DataFrame, filepath: str) -> Dict:
+    """Plot log odds distributions by probe question with statistical significance."""
+    import matplotlib.pyplot as plt
+    
+    # Get unique probe questions and their info
+    probe_info = data[['probe_question_idx', 'probe', 'probe_type']].drop_duplicates().sort_values('probe_question_idx')
+    
+    # Compute discriminability statistics
+    discriminability_results = compute_probe_discriminability(data)
+    
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(max(12, len(probe_info) * 1.5), 16))
+    
+    # First subplot: Original probe order
+    plt.sca(ax1)
+    ax1 = create_probe_boxplot(data, probe_info)
+    add_significance_stars(ax1, data, probe_info, discriminability_results)
+    add_category_braces(ax1, probe_info)
+    
+    ax1.set_title('Log Odds Distribution by Probe Question\n(* indicates p<0.05 for paired t-test)')
+    ax1.set_xlabel('Probe Question Index')
+    ax1.set_ylabel('Log Odds')
+    ax1.tick_params(axis='x', rotation=45)
     
     # Handle legend to avoid duplicates from stripplot
-    handles, labels = ax.get_legend_handles_labels()
-    # Take only the first two handles/labels (from boxplot)
-    plt.legend(handles[:2], ['False', 'True'], title='Truth')
+    handles, labels = ax1.get_legend_handles_labels()
+    ax1.legend(handles[:2], ['False', 'True'], title='Truth')
     
-    # Adjust layout to make room for category labels
-    plt.subplots_adjust(bottom=0.15)
+    # Second subplot: Ordered by discriminability, centered at 0
+    plt.sca(ax2)
+    ax2 = create_discriminability_ordered_plot(data, discriminability_results)
+    
+    ax2.set_title('Probe Questions Ordered by Discriminability (Δ from probe mean)\nLeast discriminable (left) → Most discriminable (right)')
+    ax2.set_xlabel('Probe Index (ordered by discriminability)')
+    ax2.set_ylabel('Δ Log Odds (centered at probe mean)')
+    
+    # Handle legend for second plot
+    handles, labels = ax2.get_legend_handles_labels()
+    ax2.legend(handles[:2], ['False', 'True'], title='Truth')
+    
+    # Adjust layout
     plt.tight_layout()
     plt.savefig(filepath, dpi=300, bbox_inches='tight')
     plt.show()
     
     # Print significance results
     print("\nStatistical significance results:")
-    print("Probe | P-value | Significant")
-    print("-" * 30)
-    for result in significance_results:
+    print("Probe | P-value | Significant | Cohen's d")
+    print("-" * 45)
+    for i, result in enumerate(discriminability_results['probe_results']):
         sig_marker = "*" if result['significant'] else ""
-        print(f"{result['probe_idx']:5d} | {result['p_value']:7.4f} | {sig_marker}")
-    
-    return significance_results
+        print(f"{i:5d} | {result['p_value']:7.4f} | {sig_marker:11s} | {result['effect_size']:8.3f}")
 
+    return discriminability_results
 
 def get_probe_type_info(probe_df: pd.DataFrame) -> Dict[str, Dict]:
     """Get information about each probe type."""

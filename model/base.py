@@ -148,12 +148,10 @@ class ChatTemplateWrapper:
 
         # Expand out cache to repeat over batch
         if past_key_values is not None:
-            cache_position = self.duplicate_cache(
+            self.duplicate_cache(
                 past_key_values=past_key_values,
                 inputs=inputs
             )
-        else:
-            cache_position = None
 
         outputs = self.model(
             input_ids=inputs.input_ids,
@@ -165,6 +163,53 @@ class ChatTemplateWrapper:
         )
 
         return outputs
+    
+    @torch.no_grad()
+    def generate_parallel(
+        self,
+        chats: List[str],
+        max_new_tokens: int = 1024,
+        temperature: float = 0.0,
+        do_sample: bool = False,
+        **kwargs
+    ):
+        """
+        See self.generate for arguments
+        Haven't figured out caching for this yet!
+        """
+        # Tokenize the chats internally
+        inputs = self.tokenizer(
+            chats,
+            return_tensors="pt",
+            padding = True,
+            padding_side = "left",
+            truncation=True,
+        ).to(self.device)
+
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            do_sample=do_sample,
+            pad_token_id=self.tokenizer.eos_token_id,
+            return_dict_in_generate=True,
+            **kwargs
+        )
+
+        input_length = inputs.input_ids.shape[1]
+        
+        generated_sequences = outputs.sequences
+
+        generated_texts = [self.tokenizer.decode(generated_sequence[input_length:], skip_special_tokens=True) for generated_sequence in generated_sequences]
+        generated_full_texts = [self.tokenizer.decode(generated_sequence, skip_special_tokens=True) for generated_sequence in generated_sequences]
+
+        return {
+            "sequences": generated_sequences,
+            "generated_full_texts": generated_full_texts,
+            "generated_texts": generated_texts,
+            "input_length": input_length
+        }
+
     
     @torch.no_grad()
     def generate(
@@ -179,7 +224,7 @@ class ChatTemplateWrapper:
     ) -> Dict[str, Any]:
         """
         Generate text for a batch of chat strings.
-        
+
         Args:
             chats: List of formatted chat strings
             past_key_values: Optional cached key-value states (DynamicCache)
@@ -241,10 +286,9 @@ class ChatTemplateWrapper:
             generated_texts.append(text)
             generated_full_texts.append(full_text)
         
-        import pdb; pdb.set_trace()
-        
         return {
             # "sequences": generated_sequences,
+            "generated_full_texts": generated_full_texts,
             "generated_texts": generated_texts,
             "input_length": input_length
         }
@@ -258,7 +302,7 @@ class ChatTemplateWrapper:
         user_message: Optional[str] = None,
         prefiller: Optional[str] = None,
         max_cache_len: int = 1024
-    ) -> Dict[str, Union[DynamicCache, torch.Tensor]]:
+    ) -> Dict[str, Union[DynamicCache, torch.Tensor, str]]:
         """
         Create a DynamicCache object containing precomputed key-value states for a system prompt.
         
