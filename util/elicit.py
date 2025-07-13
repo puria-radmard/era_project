@@ -52,7 +52,7 @@ def get_choice_token_logits_from_token_ids(
     Extract and sum logits for choice tokens (A, B, C, etc.) from the full vocabulary logits.
     
     Args:
-        logits: Full vocabulary logits tensor of shape [batch_size, vocab_size]
+        logits: Full vocabulary logits tensor of shape [batch_size, get_choice_token_logits_from_config, vocab_size]
         choice_tokens_ids: List of token ids for each choice, i.e. len(choice_tokens_ids) = num choices, and len(choice_tokens_ids[i]) = num possible tokens for choice i
         
     Returns:
@@ -69,8 +69,7 @@ def get_choice_token_logits_from_token_ids(
     # For each choice
     for choice_idx, possible_token_ids in enumerate(choice_tokens_ids):
         for token_id in possible_token_ids:
-            import pdb; pdb.set_trace()
-            choice_probs[:, choice_idx] += probs[:, token_id]
+            choice_probs[:, choice_idx] += probs[:, -1, token_id]
     
     return choice_probs
 

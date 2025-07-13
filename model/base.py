@@ -50,6 +50,7 @@ class ChatTemplateWrapper:
         in_context_answers: Optional[List[str]] = None,
         user_message: Optional[str] = None,
         prefiller: Optional[str] = None,
+        keep_bos: bool = False
     ) -> str:
         """
         Format a system prompt and user message according to the model's chat template.
@@ -91,6 +92,11 @@ class ChatTemplateWrapper:
 
         # FIXME: so crazy to me that this is in here
         prompt = re.sub(r'\n\nCutting Knowledge Date: [A-Za-z]+\s+\d{4}\nToday Date: \d{1,2} [A-Za-z]{3} \d{4}', '', prompt)
+        
+        prompt = prompt.replace('<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n<|eot_id|>', '<|begin_of_text|>')
+
+        if system_prompt is None and not keep_bos:
+            prompt = prompt.removeprefix('<|begin_of_text|>')
 
         return prompt
                 
@@ -155,7 +161,7 @@ class ChatTemplateWrapper:
             past_key_values=past_key_values,
             use_cache=use_cache,
             return_dict=return_dict,
-            cache_position = cache_position,
+            # cache_position = cache_position,
         )
 
         return outputs
@@ -165,11 +171,10 @@ class ChatTemplateWrapper:
         self,
         chats: List[str],
         past_key_values: Optional[DynamicCache] = None,
-        past_key_values_str: str = "",
+        past_key_values_str: str = None,
         max_new_tokens: int = 1024,
         temperature: float = 0.0,
         do_sample: bool = False,
-        max_length: int = 2048,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -191,59 +196,55 @@ class ChatTemplateWrapper:
                 - "generated_texts": Decoded generated text (new tokens only)
                 - "input_length": Length of input tokens
         """
-        # Tokenize the chats internally
-        inputs = self.tokenizer(
-            [past_key_values_str + chat for chat in chats],
-            return_tensors="pt",
-            padding=True,
-            padding_side = "left",
-            truncation=True,
-            max_length=max_length
-        ).to(self.device)
-        
-        # Calculate input length for extracting new tokens later
-        if past_key_values is not None:
-            # For DynamicCache, get sequence length
-            cache_length = past_key_values.get_seq_length()
-            input_length = cache_length + inputs.input_ids.shape[1]
-            cache_position = self.duplicate_cache(past_key_values=past_key_values, inputs=inputs)
-        else:
-            input_length = inputs.input_ids.shape[1]
-            cache_position=None
-        
-        import pdb; pdb.set_trace()
+        assert (past_key_values is None) == (past_key_values_str is None)
 
-        # Generate
-        outputs = self.model.generate(
-            input_ids=inputs.input_ids,
-            attention_mask=inputs.attention_mask,
-            past_key_values=copy.deepcopy(past_key_values),
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            do_sample=do_sample,
-            pad_token_id=self.tokenizer.eos_token_id,
-            return_dict_in_generate=True,
-            cache_position=cache_position,
-            **kwargs
-        )
-        
-        # Extract and decode new tokens
-        generated_sequences = outputs.sequences
-        batch_size = len(chats)
+        # if (past_key_values_str is not None):
+        #     cache_position = torch.tensor([past_key_values.get_seq_length()], dtype=torch.long, device=self.device)
+        # else:
+        #     cache_position = None
+
         generated_texts = []
-        
-        for i in range(batch_size):
-            # Extract only newly generated tokens
-            new_tokens = generated_sequences[i, input_length:]
+        generated_full_texts = []
 
-            # Decode to text
-            text = self.tokenizer.decode(new_tokens, skip_special_tokens=True)
-            text = text.strip()
+        # Tokenize the chats internally
+        for chat in chats:
+            if (past_key_values_str is not None):
+                chat = past_key_values_str + chat
+
+            inputs = self.tokenizer(
+                chat,
+                return_tensors="pt",
+                padding=False, 
+                truncation=False,
+                add_special_tokens = False,
+            ).to("cuda")
+            input_length = inputs.input_ids.shape[1]
+
+
+            past_key_values_copy = copy.deepcopy(past_key_values)
+            
+            outputs = self.model.generate(
+                **inputs,
+                past_key_values=past_key_values_copy,
+                # cache_position=cache_position,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                do_sample=do_sample,
+                pad_token_id=self.tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+                **kwargs
+            )
+
+            text = self.tokenizer.decode(outputs.sequences[0, input_length:], skip_special_tokens=False)
+            full_text = self.tokenizer.decode(outputs.sequences[0], skip_special_tokens=False, max_new_tokens=20).strip()
             
             generated_texts.append(text)
+            generated_full_texts.append(full_text)
+        
+        import pdb; pdb.set_trace()
         
         return {
-            "sequences": generated_sequences,
+            # "sequences": generated_sequences,
             "generated_texts": generated_texts,
             "input_length": input_length
         }
@@ -290,7 +291,8 @@ class ChatTemplateWrapper:
             formatted_prompt, 
             return_tensors="pt", 
             padding=False, 
-            truncation=False
+            truncation=False,
+            add_special_tokens=False
         ).to(self.device)
 
         outputs = self.model(

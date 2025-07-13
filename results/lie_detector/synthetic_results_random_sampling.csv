@@ -1,0 +1,11 @@
+D,strategy,mean_auc,std_auc
+1,random,0.7383437500000001,0.02593667167352044
+3,random,1.0,0.0
+5,random,1.0,0.0
+7,random,1.0,0.0
+9,random,1.0,0.0
+11,random,1.0,0.0
+13,random,1.0,0.0
+15,random,1.0,0.0
+17,random,1.0,0.0
+20,random,1.0,0.0

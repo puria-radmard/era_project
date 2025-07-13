@@ -51,8 +51,12 @@ for option_str_list in yesno_strings:
 # Load in the probe questions
 probe_questions = pd.read_csv('data/probes_with_yn.csv')['probe']
 
+# Initialise results df
+probe_results_df = pd.DataFrame(columns=['question_idx', 'truth', 'probe_question_idx', 'prob_yes', 'prob_no'])
+
+
 # Loop over these questions
-for qai in trainable_questions_idxs:
+for qai in tqdm(trainable_questions_idxs):
 
     question = question_data['question'][f'{qai}'].strip()
     response_row = trainable_answers[trainable_answers['question_idx'] == qai]
@@ -71,22 +75,62 @@ for qai in trainable_questions_idxs:
             prefiller='',
         ) for probe_question in probe_questions
     ]
-    
-    import pdb; pdb.set_trace()
-    truth_generate = chat_wrapper.generate(chats = truth_followup_chats[:1], past_key_values=truth_cache, past_key_values_str = truth_cache_str)
-    truth_generate = chat_wrapper.generate(chats = truth_followup_chats, past_key_values=truth_cache)
-
+    # truth_generate = chat_wrapper.generate(chats = truth_followup_chats[:3], past_key_values=truth_cache, past_key_values_str = truth_cache_str)
     truth_forward = chat_wrapper.forward(
         chats = truth_followup_chats,
         past_key_values = truth_cache,
     )
+    new_probe_truth_answer_info = get_choice_token_logits_from_token_ids(truth_forward['logits'], yesno_tokens)
 
+    lie_cache_info = chat_wrapper.create_prompt_cache(
+        system_prompt=SYSTEM_PROMPT,
+        in_context_questions=[f'{lie_prompt} {question}'],
+        in_context_answers=[response_row.lie_answer.item()]
+    )
+    lie_cache = lie_cache_info["cache"]
+    lie_cache_str = lie_cache_info["formatted_prompt"]
+    lie_followup_chats = [
+        chat_wrapper.format_chat(
+            system_prompt=None,
+            user_message=probe_question,
+            prefiller='',
+        ) for probe_question in probe_questions
+    ]
+    # lie_generate = chat_wrapper.generate(chats = lie_followup_chats[:3], past_key_values=lie_cache, past_key_values_str = lie_cache_str)
+    lie_forward = chat_wrapper.forward(
+        chats = lie_followup_chats,
+        past_key_values = lie_cache,
+    )
+    new_probe_lie_answer_info = get_choice_token_logits_from_token_ids(lie_forward['logits'], yesno_tokens)
+    
 
-    get_choice_token_logits_from_token_ids(truth_forward['logits'], yesno_tokens)
+    # Append results
+    num_probe_questions = new_probe_truth_answer_info.shape[0]
+    rows = []
+    for probe_idx in range(num_probe_questions):
+        prob_yes = new_probe_truth_answer_info[probe_idx, 0].item()
+        prob_no = new_probe_truth_answer_info[probe_idx, 1].item()
+        rows.append({
+            'question_idx': qai,
+            'truth': 1,
+            'probe_question_idx': probe_idx,
+            'prob_yes': prob_yes,
+            'prob_no': prob_no
+        })
+
+        prob_yes = new_probe_lie_answer_info[probe_idx, 0].item()
+        prob_no = new_probe_lie_answer_info[probe_idx, 1].item()
+        rows.append({
+            'question_idx': qai,
+            'truth': 0,
+            'probe_question_idx': probe_idx,
+            'prob_yes': prob_yes,
+            'prob_no': prob_no
+        })
+
+    probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
+    probe_results_df.to_csv(f'results/lie_detector/questions_1000_probe_prompt{most_lies_prompt_idx}.csv', index=False)
 
 
 
     
-    
-
-print(trainable_answers)
