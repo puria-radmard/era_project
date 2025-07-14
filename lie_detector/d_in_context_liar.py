@@ -39,7 +39,7 @@ sorting_key = args.icl_sorting_key
 chat_wrapper = load_model(model_name, device='auto')
 
 # Prepare for saving results
-os.makedirs(f"{save_path}/in_context_learning/prompt{prompt_index}/{sorting_key}", exist_ok=True)
+os.makedirs(f"{save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}", exist_ok=True)
 
 # 1. Load original answers dataframe
 print("Loading original answers...")
@@ -124,6 +124,7 @@ for i in single_token_truth_indices:
     
     # Clean and tokenize lie answer
     lie_clean = lie_ans.rstrip('.') if lie_ans.endswith('.') else lie_ans
+
     lie_tokens = chat_wrapper.tokenizer.encode(lie_clean, add_special_tokens=False)
     
     # Only keep if both are single tokens
@@ -138,10 +139,10 @@ yes_token_id = chat_wrapper.tokenizer.encode("Yes", add_special_tokens=False)[0]
 print(f"Questions with both single-token truth and lie answers: {len(valid_indices)}")
 
 # FILTERING STAGE 3: Limit to first 96 for speed
-print("LIMITING TO FIRST 96 VALID QUESTIONS")
-valid_indices = valid_indices[:96]
-truth_token_ids = truth_token_ids[:96]
-lie_token_ids = lie_token_ids[:96]
+# print("LIMITING TO FIRST 96 VALID QUESTIONS")
+# valid_indices = valid_indices[:96]
+# truth_token_ids = truth_token_ids[:96]
+# lie_token_ids = lie_token_ids[:96]
 
 # Apply final filtering to QA pairs
 valid_qa_pairs = [valid_qa_pairs[i] for i in valid_indices]
@@ -156,8 +157,9 @@ context_types = [
     'top_truth_shuffled_together',    # 2. Top questions + truth answers, shuffled together  
     'top_lie_questions_shuffled',     # 3. Top questions shuffled + lie answers fixed order
     'top_truth_questions_shuffled',   # 4. Top questions shuffled + truth answers fixed order
-    'random_lie_answers',             # 5. Random questions + lie answers fixed order
-    'random_truth_answers'            # 6. Random questions + truth answers fixed order
+    # 'random_lie_answers',             # 5. Random questions + lie answers fixed order
+    # 'random_truth_answers'            # 6. Random questions + truth answers fixed order
+    'top_questions_random_answers',     # 5alt. Top questions + 50/50 random answers
 ]
 
 def get_context(N: int):
@@ -198,9 +200,12 @@ def get_context(N: int):
     random.shuffle(top_questions_shuffled_control)
     top_questions_shuffled_control = list(top_questions_shuffled_control)
 
-    # Random questions for types
-    random_questions = random.sample(probe_questions, min(N, len(probe_questions)))
+    # Random questions for types 5 and 6
+    # random_questions = random.sample(probe_questions, min(N, len(probe_questions)))
 
+    # Random answers for type 5alt
+    random50_answers = ["Yes." if random.random() < 0.5 else "No." for _ in truth_answers_shuffled]
+    
     return {
         # Type 1: Top questions + lie answers, shuffled together
         'top_lie_shuffled_together': (top_questions_shuffled, lie_answers_shuffled),
@@ -214,11 +219,14 @@ def get_context(N: int):
         # Type 4: Top questions shuffled independently + truth answers in same order as type 2
         'top_truth_questions_shuffled': (top_questions_shuffled_control, truth_answers_shuffled),
         
-        # Type 5: Random questions + lie answers in same order as type 1
-        'random_lie_answers': (random_questions, lie_answers_shuffled),
+        # # Type 5: Random questions + lie answers in same order as type 1
+        # 'random_lie_answers': (random_questions, lie_answers_shuffled),
         
-        # Type 6: Random questions + truth answers in same order as type 2
-        'random_truth_answers': (random_questions, truth_answers_shuffled)
+        # # Type 6: Random questions + truth answers in same order as type 2
+        # 'random_truth_answers': (random_questions, truth_answers_shuffled)
+
+        # Type 5alt. Top questions + 50/50 random answers
+        'top_questions_random_answers': (top_questions_shuffled, random50_answers)
     }
 
 # Results storage
@@ -238,12 +246,12 @@ for N in context_lengths_desc:
     for context_type in context_types:
         print(f"\nTesting context type: {context_type}")
         
-        question_truth_probs_across_samples = [[] for _ in range(len(valid_qa_pairs))]
-        question_lie_probs_across_samples = [[] for _ in range(len(valid_qa_pairs))]
-        question_yes_probs_across_samples = [[] for _ in range(len(valid_qa_pairs))]
-        question_no_probs_across_samples = [[] for _ in range(len(valid_qa_pairs))]
-        question_truth_probs_across_samples_excl_yn = [[] for _ in range(len(valid_qa_pairs))]
-        question_lie_probs_across_samples_excl_yn = [[] for _ in range(len(valid_qa_pairs))]
+        question_truth_probs_across_samples = np.full((len(valid_qa_pairs), n_samples), np.nan)
+        question_lie_probs_across_samples = np.full((len(valid_qa_pairs), n_samples), np.nan)
+        question_yes_probs_across_samples = np.full((len(valid_qa_pairs), n_samples), np.nan)
+        question_no_probs_across_samples = np.full((len(valid_qa_pairs), n_samples), np.nan)
+        question_truth_probs_across_samples_excl_yn = np.full((len(valid_qa_pairs), n_samples), np.nan)
+        question_lie_probs_across_samples_excl_yn = np.full((len(valid_qa_pairs), n_samples), np.nan)
         
         for sample_idx in tqdm(range(n_samples)):
             
@@ -269,6 +277,7 @@ for N in context_lengths_desc:
             )
             
             for i in range(0, len(test_questions), batch_size):
+                
                 batch_questions = test_questions[i:i+batch_size]
                 
                 # Call elicit_next_token_probs
@@ -276,10 +285,16 @@ for N in context_lengths_desc:
                     chat_wrapper=chat_wrapper,
                     questions=batch_questions,
                     cache_data=copy.deepcopy(context_cache_info),
+
+                    # system_prompt=system_prompt,
+                    # shared_in_context_questions=shared_in_context_questions,
+                    # shared_in_context_answers=shared_in_context_answers,
+
                     prefiller=""
                 )
                 
                 batch_probs = result["probs"]  # [batch_size, vocab_size]
+
                 all_probs.append(batch_probs)
             
             # Concatenate all batch results
@@ -297,46 +312,47 @@ for N in context_lengths_desc:
                 yes_prob = all_probs[q_idx, yes_token_id].item()
                 no_prob = all_probs[q_idx, no_token_id].item()
                 
-                question_truth_probs_across_samples[q_idx].append(truth_prob)
-                question_lie_probs_across_samples[q_idx].append(lie_prob)
+                question_truth_probs_across_samples[q_idx,sample_idx] = truth_prob
+                question_lie_probs_across_samples[q_idx,sample_idx] = lie_prob
 
-                question_yes_probs_across_samples[q_idx].append(yes_prob)
-                question_no_probs_across_samples[q_idx].append(no_prob)
+                question_yes_probs_across_samples[q_idx,sample_idx] = yes_prob
+                question_no_probs_across_samples[q_idx,sample_idx] = no_prob
 
-                question_truth_probs_across_samples_excl_yn[q_idx].append(truth_prob / (1.0 - yes_prob - no_prob))
-                question_lie_probs_across_samples_excl_yn[q_idx].append(lie_prob / (1.0 - yes_prob - no_prob))
+                question_truth_probs_across_samples_excl_yn[q_idx,sample_idx] = truth_prob / (1.0 - yes_prob - no_prob + 1e-10)
+                question_lie_probs_across_samples_excl_yn[q_idx,sample_idx] = lie_prob / (1.0 - yes_prob - no_prob + 1e-10)
 
         
         # Average probabilities across samples for each question
-        question_avg_truth_probs = [float(np.mean(probs)) for probs in question_truth_probs_across_samples]
-        question_avg_lie_probs = [float(np.mean(probs)) for probs in question_lie_probs_across_samples]
-        question_avg_yes_probs = [float(np.mean(probs)) for probs in question_yes_probs_across_samples]
-        question_avg_no_probs = [float(np.mean(probs)) for probs in question_no_probs_across_samples]
-        question_avg_truth_probs_excl_yn = [float(np.mean(probs)) for probs in question_truth_probs_across_samples_excl_yn]
-        question_avg_lie_probs_excl_yn = [float(np.mean(probs)) for probs in question_lie_probs_across_samples_excl_yn]
+        question_avg_truth_probs = question_truth_probs_across_samples.mean(-1)
+        question_avg_lie_probs = question_lie_probs_across_samples.mean(-1)
+        question_avg_yes_probs = question_yes_probs_across_samples.mean(-1)
+        question_avg_no_probs = question_no_probs_across_samples.mean(-1)
+        question_avg_truth_probs_excl_yn = question_truth_probs_across_samples_excl_yn.mean(-1)
+        question_avg_lie_probs_excl_yn = question_lie_probs_across_samples_excl_yn.mean(-1)
         
         # Store results
         all_results[context_type].append({
             'context_length': N,
             'context_type': context_type,
-            'mean_truth_prob': np.mean(question_avg_truth_probs),
-            'std_truth_prob': np.std(question_avg_truth_probs),
-            'mean_lie_prob': np.mean(question_avg_lie_probs),
-            'std_lie_prob': np.std(question_avg_lie_probs),
-            'mean_yes_prob': np.mean(question_avg_yes_probs),
-            'std_yes_prob': np.std(question_avg_yes_probs),
-            'mean_no_prob': np.mean(question_avg_no_probs),
-            'std_no_prob': np.std(question_avg_no_probs),
-            'mean_truth_prob_excl_yn': np.mean(question_avg_truth_probs_excl_yn),
-            'std_truth_prob_excl_yn': np.std(question_avg_truth_probs_excl_yn),
-            'mean_lie_prob_excl_yn': np.mean(question_avg_lie_probs_excl_yn),
-            'std_lie_prob_excl_yn': np.std(question_avg_lie_probs_excl_yn),
-            'question_truth_probs': question_avg_truth_probs,
-            'question_lie_probs': question_avg_lie_probs,
-            'question_truth_probs_excl_yn': question_avg_truth_probs_excl_yn,
-            'question_lie_probs_excl_yn': question_avg_lie_probs_excl_yn,
+            'mean_truth_prob': float(np.mean(question_avg_truth_probs)),
+            'std_truth_prob': float(np.std(question_avg_truth_probs)),
+            'mean_lie_prob': float(np.mean(question_avg_lie_probs)),
+            'std_lie_prob': float(np.std(question_avg_lie_probs)),
+            'mean_yes_prob': float(np.mean(question_avg_yes_probs)),
+            'std_yes_prob': float(np.std(question_avg_yes_probs)),
+            'mean_no_prob': float(np.mean(question_avg_no_probs)),
+            'std_no_prob': float(np.std(question_avg_no_probs)),
+            'mean_truth_prob_excl_yn': float(np.mean(question_avg_truth_probs_excl_yn)),
+            'std_truth_prob_excl_yn': float(np.std(question_avg_truth_probs_excl_yn)),
+            'mean_lie_prob_excl_yn': float(np.mean(question_avg_lie_probs_excl_yn)),
+            'std_lie_prob_excl_yn': float(np.std(question_avg_lie_probs_excl_yn)),
+            'question_truth_probs': [float(q) for q in question_avg_truth_probs],
+            'question_lie_probs': [float(q) for q in question_avg_lie_probs],
+            'question_truth_probs_excl_yn': [float(q) for q in question_avg_truth_probs_excl_yn],
+            'question_lie_probs_excl_yn': [float(q) for q in question_avg_lie_probs_excl_yn],
         })
         
+        print(f"{context_type} results for {len(question_avg_truth_probs)} questions:")
         print(f"  Mean truth prob: {np.mean(question_avg_truth_probs):.4f} ± {np.std(question_avg_truth_probs):.4f}")
         print(f"  Mean lie prob: {np.mean(question_avg_lie_probs):.4f} ± {np.std(question_avg_lie_probs):.4f}")
         print(f"  Mean yes prob: {np.mean(question_avg_yes_probs):.4f} ± {np.std(question_avg_yes_probs):.4f}")
@@ -433,7 +449,7 @@ for N in context_lengths_desc:
             if len(lie_question_truth_probs) > 1 and len(truth_question_truth_probs) > 1:
                 stat, p_value = ttest_rel(lie_question_truth_probs, truth_question_truth_probs)
                 
-                if p_value < 0.05:
+                if p_value < 0.05 and stat < 0.0:
                     # Add star above the highest point at this N
                     max_y = max(
                         lie_result['mean_truth_prob'] + lie_result['std_truth_prob'],
@@ -488,36 +504,18 @@ for N in context_lengths_desc:
     axes[1].grid(True, alpha=0.3)
     axes[2].grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f'{save_path}/in_context_learning/prompt{prompt_index}/{sorting_key}/context_effect_analysis_comprehensive.png', 
+    plt.savefig(f'{save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_analysis.png', 
                dpi=300, bbox_inches='tight')
     plt.close()  # Close to save memory
     
     # Save detailed results so far
-    all_results_flat = []
-    for context_type in context_types:
-        for result in all_results[context_type]:
-            for k, v in result.items():
-                if isinstance(v, np.ndarray) or isinstance(v, list):
-                    result[k] = [float(item) for item in v]
-            all_results_flat.append(result)
-
-    if all_results_flat:  # Only save if we have results
-        results_df = pd.DataFrame(all_results_flat)
-        results_df.to_csv(f'{save_path}/in_context_learning/prompt{prompt_index}/{sorting_key}context_effect_results_comprehensive.csv', 
-                         index=False)
+    with open(f'{save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_results.json', 'w') as f:
+        json.dump(all_results, f)
 
     print(f"Results updated and saved after N={N}")
 
-# Save individual results for each context type at the end
-for context_type in context_types:
-    context_results = all_results[context_type]
-    if context_results:
-        context_df = pd.DataFrame(context_results)
-        context_df.to_csv(f'{save_path}/in_context_learning/prompt{prompt_index}/{sorting_key}/context_effect_results_{context_type}.csv', 
-                         index=False)
 
 print("Analysis complete!")
 print("Results saved to:")
-print(f"  - {save_path}/in_context_learning/prompt{prompt_index}/{sorting_key}/context_effect_analysis_comprehensive.png")
-print(f"  - {save_path}/in_context_learning/prompt{prompt_index}/{sorting_key}/context_effect_results_comprehensive.csv")
+print(f"  - {save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_results.csv")
 print(f"  - Individual CSV files for each context type")

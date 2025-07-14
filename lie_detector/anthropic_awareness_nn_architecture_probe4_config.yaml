@@ -1,0 +1,16 @@
+batch_size: 32
+system_prompt: "Do not provide explanations to any answers. Answer with one word if possible."
+questions_data_name: "anthropic_awareness_nn_architecture"
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+save_path: "lie_detector_results"
+
+prompt_idx: 4
+samples_per_classifier_size: 15
+
+context_lengths: [0, 1, 2, 5, 10, 15, 20, 25, 30] #, 35, 40, 45, 50]
+samples_per_context_length: 64
+icl_batch_size: 16
+
+excluded_probe_types: ['Confession', 'Psychological', 'Confusion']
+
+icl_sorting_key: effect_size
