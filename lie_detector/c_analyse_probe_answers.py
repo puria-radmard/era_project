@@ -78,7 +78,7 @@ if __name__ == "__main__":
     probes_path = f"data/probes_with_yn.csv"
 
     # Prepare for saving results
-    os.makedirs(f"{save_path}/probe_analysis/prompt{prompt_index}", exist_ok=True)
+    os.makedirs(f"{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}", exist_ok=True)
     
     data = load_and_preprocess_data(results_path, probes_path)
     probe_df = pd.read_csv(probes_path).reset_index().rename(columns={'index': 'probe_question_idx'})
@@ -91,8 +91,8 @@ if __name__ == "__main__":
     print(f"Non-unity probability sums: {len(non_unity_probs)} / {len(prob_sums)}")
     
     # Plot probe type analysis (unchanged)
-    discriminability_results = plot_probe_type_analysis(data, f'{save_path}/probe_analysis/prompt{prompt_index}/probe_type_analysis.png')
-    filename = f'{save_path}/probe_analysis/prompt{prompt_index}/discriminability_results.json'
+    discriminability_results = plot_probe_type_analysis(data, f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/probe_type_analysis.png')
+    filename = f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/discriminability_results.json'
     with open(filename, 'w') as f:
         json.dump(discriminability_results, f)
     
@@ -134,16 +134,16 @@ if __name__ == "__main__":
             'roc_data': roc_data_type
         }
 
-        filename = f'{save_path}/probe_analysis/prompt{prompt_index}/results_{probe_type}.json'
+        filename = f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/results_{probe_type}.json'
         # pd.DataFrame(results_type).to_csv(filename, index=False)
         with open(filename, 'w') as f:
             json.dump(results_all_verbose, f)
 
         # AUC vs D plot (all categories on same plot)
-        plot_auc_vs_d_comprehensive(all_results, f'{save_path}/probe_analysis/prompt{prompt_index}/AUC_vs_d.png')
+        plot_auc_vs_d_comprehensive(all_results, f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/AUC_vs_d.png')
 
         # ROC curves (separate subplots for each category)
-        plot_roc_curves_comprehensive(all_results, f'{save_path}/probe_analysis/prompt{prompt_index}/ROC_curves.png')
+        plot_roc_curves_comprehensive(all_results, f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/ROC_curves.png')
 
 
     # 2. All probes experiment
@@ -173,7 +173,7 @@ if __name__ == "__main__":
         'roc_data': roc_data_all
     }
     
-    filename = f'{save_path}/probe_analysis/prompt{prompt_index}/results_all_probes.json'
+    filename = f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/results_all_probes.json'
     # pd.DataFrame(results_all).to_csv(filename, index=False)
     with open(filename, 'w') as f:
         for rav in results_all_verbose: rav['D'] = int(rav['D'])
@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
         
     # AUC vs D plot (all categories on same plot)
-    plot_auc_vs_d_comprehensive(all_results, f'{save_path}/probe_analysis/prompt{prompt_index}/AUC_vs_d.png')
+    plot_auc_vs_d_comprehensive(all_results, f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/AUC_vs_d.png')
     
     # ROC curves (separate subplots for each category)
-    plot_roc_curves_comprehensive(all_results, f'{save_path}/probe_analysis/prompt{prompt_index}/ROC_curves.png')
+    plot_roc_curves_comprehensive(all_results, f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/ROC_curves.png')

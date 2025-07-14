@@ -7,8 +7,10 @@ save_path: "lie_detector_results"
 prompt_idx: 4
 samples_per_classifier_size: 15
 
-context_lengths: [0, 1, 2, 5, 10, 15, 20, 30, 40, 43]
-samples_per_context_length: 16
+context_lengths: [0, 1, 2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+samples_per_context_length: 64
 icl_batch_size: 16
 
-excluded_probe_types: ['Confession']
+excluded_probe_types: [] # ['Confession', 'Psychological', 'Confusion']
+
+icl_sorting_key: effect_size
