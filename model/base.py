@@ -122,7 +122,8 @@ class ChatTemplateWrapper:
         chats: List[str], 
         past_key_values: Optional[DynamicCache] = None,
         return_dict: bool = True,
-        use_cache: bool = True
+        use_cache: bool = True,
+        **forward_kwargs: Any
     ) -> Dict[str, Any]:
         """
         Run forward pass on a batch of chat strings.
@@ -160,6 +161,7 @@ class ChatTemplateWrapper:
             use_cache=use_cache,
             return_dict=return_dict,
             # cache_position = cache_position,
+            **forward_kwargs
         )
 
         return outputs
