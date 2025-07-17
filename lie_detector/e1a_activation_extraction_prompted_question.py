@@ -37,7 +37,6 @@ with open('data/prompts.json', 'r') as f:
 trainable_answers = knows_answer[(knows_answer['prompt_idx'] == prompt_index) & (knows_answer['told_lie'])]
 trainable_questions_idxs = trainable_answers['question_idx']
 
-# Get yes/no tokens which we'd like to search for
 chat_wrapper = load_model(model_name, device='auto')
 
 candidate_layers = list(range(32))
@@ -81,7 +80,7 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
 
 
 
-save_target = f"{save_path}/activation_discovery/{questions_data_name}/prompt{prompt_index}"
+save_target = f"{save_path}/activation_discovery/prompted/{questions_data_name}/prompt{prompt_index}"
 os.makedirs(save_target, exist_ok=True)
 
 torch.save(all_truth_residual, os.path.join(save_target, 'all_truth_residual_with_question.pt'))

@@ -7,7 +7,7 @@ import seaborn as sns
 from typing import List, Tuple, Dict, Optional
 
 
-def load_and_preprocess_data(results_path: str, probes_path: str) -> pd.DataFrame:
+def load_and_preprocess_data(results_path: str, probes_path: str, calc_log_odds: bool = True) -> pd.DataFrame:
     """Load CSVs, merge probe info, compute log odds with clipping."""
     # Load main results
     results = pd.read_csv(results_path)
@@ -19,8 +19,9 @@ def load_and_preprocess_data(results_path: str, probes_path: str) -> pd.DataFram
     # Merge probe info
     data = results.merge(probes, on='probe_question_idx', how='left')
     
-    # Compute log odds
-    data['log_odds'] = compute_log_odds(data['prob_yes'], data['prob_no'])
+    if calc_log_odds:
+        # Compute log odds
+        data['log_odds'] = compute_log_odds(data['prob_yes'], data['prob_no'])
     
     return data
 
@@ -86,7 +87,9 @@ def sample_probe_questions(n_probes: int, probe_df: pd.DataFrame,
 
 
 def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray, 
-                           test_questions: np.ndarray, probe_indices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                           test_questions: np.ndarray, probe_indices: np.ndarray,
+                           key: str
+                           ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Extract X, y matrices for train/test from selected probes/questions."""
         
     # Filter data for selected probes
@@ -97,7 +100,7 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
     train_pivot = train_data.pivot_table(
         index=['question_idx', 'truth'], 
         columns='probe_question_idx', 
-        values='log_odds', 
+        values=key, 
         fill_value=np.nan  # Changed from 0 to NaN to detect missing data
     )
         
@@ -115,7 +118,7 @@ def prepare_features_labels(data: pd.DataFrame, train_questions: np.ndarray,
     test_pivot = test_data.pivot_table(
         index=['question_idx', 'truth'], 
         columns='probe_question_idx', 
-        values='log_odds', 
+        values=key, 
         fill_value=np.nan
     )
         
@@ -217,7 +220,7 @@ def train_evaluate_model(X_train: np.ndarray, y_train: np.ndarray,
     }
 
 
-def run_cv_experiment(data: pd.DataFrame, probe_indices: np.ndarray, n_folds: int = 5) -> Dict[str, float]:
+def run_cv_experiment(data: pd.DataFrame, probe_indices: np.ndarray, key: str, n_folds: int = 5) -> Dict[str, float]:
     """Full CV loop: returns mean test AUC across folds."""
     
     question_ids = data['question_idx'].unique()
@@ -228,7 +231,7 @@ def run_cv_experiment(data: pd.DataFrame, probe_indices: np.ndarray, n_folds: in
     
     for fold_idx, (train_questions, test_questions) in enumerate(cv_splits):
         X_train, y_train, X_test, y_test = prepare_features_labels(
-            data, train_questions, test_questions, probe_indices
+            data, train_questions, test_questions, probe_indices, key
         )
         
         if len(np.unique(y_train)) < 2 or len(np.unique(y_test)) < 2:
@@ -347,7 +350,7 @@ def plot_auc_vs_d_comprehensive(all_results: Dict[str, Dict], filepath: str):
     plt.show()
 
 
-def compute_probe_discriminability(data: pd.DataFrame) -> Dict:
+def compute_probe_discriminability(data: pd.DataFrame, key: str) -> Dict:
     """Compute discriminability statistics for each probe question."""
     from scipy.stats import ttest_rel
     import numpy as np
@@ -369,7 +372,7 @@ def compute_probe_discriminability(data: pd.DataFrame) -> Dict:
         pivot_data = probe_data.pivot_table(
             index='question_idx', 
             columns='truth', 
-            values='log_odds'
+            values=key
         ).dropna()  # Remove rows where we don't have both truth values
         
         if len(pivot_data) > 1 and 0 in pivot_data.columns and 1 in pivot_data.columns:
@@ -468,32 +471,32 @@ def add_category_braces(ax, probe_info):
                ha='center', va='top', fontsize=10, fontweight='bold')
 
 
-def add_significance_stars(ax, data, probe_info, discriminability_results):
+def add_significance_stars(ax, data, probe_info, discriminability_results, key: str):
     """Add significance stars above boxplots for significant probes."""
     for i, probe_result in enumerate(discriminability_results['probe_results']):
         if probe_result['significant']:
             probe_idx = probe_info.iloc[i]['probe_question_idx']
-            max_y = data[data['probe_question_idx'] == probe_idx]['log_odds'].max()
-            plt.text(i, max_y + 0.1, '*', 
+            max_y = data[data['probe_question_idx'] == probe_idx][key].max()
+            ax.text(i, max_y + 0.1, '*', 
                     ha='center', va='bottom', fontsize=16, fontweight='bold')
 
 
-def create_probe_boxplot(data: pd.DataFrame, probe_info: pd.DataFrame):
+def create_probe_boxplot(data: pd.DataFrame, key: str):
     """Create the main boxplot with stripplot overlay."""
     import seaborn as sns
     import matplotlib.pyplot as plt
     
     # Create box plot for each probe question
-    ax = sns.boxplot(data=data, x='probe_question_idx', y='log_odds', hue='truth')
+    ax = sns.boxplot(data=data, x='probe_question_idx', y=key, hue='truth')
     
     # Add scatter points overlaid on boxplots
-    sns.stripplot(data=data, x='probe_question_idx', y='log_odds', hue='truth', 
+    sns.stripplot(data=data, x='probe_question_idx', y=key, hue='truth', 
                   dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
     
     return ax
 
 
-def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_results: Dict):
+def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_results: Dict, key: str):
     """Create second subplot with probes ordered by discriminability, centered at 0."""
     import seaborn as sns
     import matplotlib.pyplot as plt
@@ -520,7 +523,7 @@ def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_re
     for _, row in probe_info.iterrows():
         probe_idx = row['probe_question_idx']
         probe_data = data[data['probe_question_idx'] == probe_idx]
-        probe_means[probe_idx] = probe_data['log_odds'].mean()
+        probe_means[probe_idx] = probe_data[key].mean()
     
     # Create transformed dataset
     transformed_data = []
@@ -529,11 +532,11 @@ def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_re
         new_pos = probe_idx_to_new_pos[probe_idx]
         
         # Delta from probe's overall mean
-        delta_log_odds = row['log_odds'] - probe_means[probe_idx]
+        delta_quantity = row[key] - probe_means[probe_idx]
         
         transformed_data.append({
             'ordered_probe_idx': new_pos,
-            'delta_log_odds': delta_log_odds,
+            f'delta_{key}': delta_quantity,
             'truth': row['truth'],
             'question_idx': row['question_idx']
         })
@@ -541,8 +544,8 @@ def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_re
     transformed_df = pd.DataFrame(transformed_data)
     
     # Create the plot
-    ax = sns.boxplot(data=transformed_df, x='ordered_probe_idx', y='delta_log_odds', hue='truth')
-    sns.stripplot(data=transformed_df, x='ordered_probe_idx', y='delta_log_odds', hue='truth', 
+    ax = sns.boxplot(data=transformed_df, x='ordered_probe_idx', y=f'delta_{key}', hue='truth')
+    sns.stripplot(data=transformed_df, x='ordered_probe_idx', y=f'delta_{key}', hue='truth', 
                   dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
     
     # Add horizontal line at y=0
@@ -551,7 +554,7 @@ def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_re
     return ax
 
 
-def plot_probe_type_analysis(data: pd.DataFrame, filepath: str) -> Dict:
+def plot_probe_type_analysis(data: pd.DataFrame, filepath: str, key: str) -> Dict:
     """Plot log odds distributions by probe question with statistical significance."""
     import matplotlib.pyplot as plt
     
@@ -559,15 +562,15 @@ def plot_probe_type_analysis(data: pd.DataFrame, filepath: str) -> Dict:
     probe_info = data[['probe_question_idx', 'probe', 'probe_type']].drop_duplicates().sort_values('probe_question_idx')
     
     # Compute discriminability statistics
-    discriminability_results = compute_probe_discriminability(data)
+    discriminability_results = compute_probe_discriminability(data, key)
     
     # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(max(12, len(probe_info) * 1.5), 16))
     
     # First subplot: Original probe order
     plt.sca(ax1)
-    ax1 = create_probe_boxplot(data, probe_info)
-    add_significance_stars(ax1, data, probe_info, discriminability_results)
+    ax1 = create_probe_boxplot(data, key)
+    add_significance_stars(ax1, data, probe_info, discriminability_results, key)
     add_category_braces(ax1, probe_info)
     
     ax1.set_title('Log Odds Distribution by Probe Question\n(* indicates p<0.05 for paired t-test)')
@@ -581,7 +584,7 @@ def plot_probe_type_analysis(data: pd.DataFrame, filepath: str) -> Dict:
     
     # Second subplot: Ordered by discriminability, centered at 0
     plt.sca(ax2)
-    ax2 = create_discriminability_ordered_plot(data, discriminability_results)
+    ax2 = create_discriminability_ordered_plot(data, discriminability_results, key)
     
     ax2.set_title('Probe Questions Ordered by Discriminability (Δ from probe mean)\nLeast discriminable (left) → Most discriminable (right)')
     ax2.set_xlabel('Probe Index (ordered by discriminability)')

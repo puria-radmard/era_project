@@ -1,0 +1,22 @@
+batch_size: 32
+system_prompt: "Do not provide explanations to any answers. Answer with one word unless instructed otherwise."
+questions_data_name: "questions_1000_all"
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+save_path: "lie_detector_results"
+probe_file_name: "probes_with_five_words"
+probe_response_type: "five_words"
+
+prompt_idx: 4
+samples_per_classifier_size: 15
+
+context_lengths: [0, 1, 2, 5, 10, 15, 20, 25]
+samples_per_context_length: 64
+icl_batch_size: 16
+
+excluded_probe_types: ['Confession', 'Psychological', 'Confusion', 'Logic']
+
+icl_sorting_key: effect_size
+
+
+samples_per_context_length_activations: 5
+context_lengths_activations: [0, 5, 10, 15, 20, 25]

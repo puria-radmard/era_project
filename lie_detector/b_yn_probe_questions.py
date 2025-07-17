@@ -17,6 +17,11 @@ questions_data_name = args.questions_data_name
 model_name = args.model_name
 save_path = args.save_path
 
+probe_file_name = args.probe_file_name
+probe_response_type = args.probe_response_type
+
+assert probe_response_type == 'yn'
+
 prompt_index = args.prompt_idx
 
 
@@ -39,6 +44,7 @@ trainable_questions_idxs = trainable_answers['question_idx']
 
 # Get yes/no tokens which we'd like to search for
 chat_wrapper = load_model(model_name, device='auto')
+
 yesno_strings = [
     ['Yes', 'yes'],
     ['No', 'no'],
@@ -59,7 +65,7 @@ for option_str_list in yesno_strings:
 
 
 # Load in the probe questions
-probe_questions = pd.read_csv('data/probes_with_yn.csv')['probe']
+probe_questions = pd.read_csv(f'data/{probe_file_name}.csv')['probe']
 
 # Initialise results df
 probe_results_df = pd.DataFrame(columns=['question_idx', 'truth', 'probe_question_idx', 'prob_yes', 'prob_no'])
@@ -139,7 +145,7 @@ for qai in tqdm(trainable_questions_idxs):
         })
 
     probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
-    probe_results_df.to_csv(f'{save_path}/probe_answers/{questions_data_name}_probe_prompt{prompt_index}.csv', index=False)
+    probe_results_df.to_csv(f'{save_path}/probe_answers/{probe_file_name}/yn/{questions_data_name}_probe_prompt{prompt_index}.csv', index=False)
 
 
 

@@ -1,8 +1,0 @@
-batch_size: 32
-system_prompt: "Do not provide explanations to any answers. Answer with one word if possible."
-questions_data_name: "questions_1000_all"
-model_name: "meta-llama/Llama-3.1-8B-Instruct"
-save_path: "lie_detector_results"
-
-prompt_idx: 6
-samples_per_classifier_size: 15

@@ -28,6 +28,11 @@ questions_data_name = args.questions_data_name
 model_name = args.model_name
 save_path = args.save_path
 
+probe_file_name = args.probe_file_name
+probe_response_type = args.probe_response_type
+
+assert probe_response_type == 'yn'
+
 prompt_index = args.prompt_idx
 
 context_lengths = args.context_lengths
@@ -39,14 +44,15 @@ sorting_key = args.icl_sorting_key
 chat_wrapper = load_model(model_name, device='auto')
 
 # Prepare for saving results
-os.makedirs(f"{save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}", exist_ok=True)
+output_path = f"{save_path}/in_context_learning/{probe_file_name}/yn/{questions_data_name}/prompt{prompt_index}/{sorting_key}"
+os.makedirs(output_path, exist_ok=True)
 
 # 1. Load original answers dataframe
 print("Loading original answers...")
 original_answers_df = pd.read_csv(f'{save_path}/initial_answers/{questions_data_name}.csv')
 
 # 2. Load probe results dataframe  
-probe_results_df = pd.read_csv(f'{save_path}/probe_answers/{questions_data_name}_probe_prompt{prompt_index}.csv')
+probe_results_df = pd.read_csv(f'{save_path}/probe_answers/{probe_file_name}/yn/{questions_data_name}_probe_prompt{prompt_index}.csv')
 
 # 3. Filter original_answers_df to prompt_idx and question_idx in probe data
 valid_question_ids = set(probe_results_df['question_idx'].unique())
@@ -70,13 +76,13 @@ valid_qa_pairs = [qa_pairs[idx] for idx in filtered_answers_df['question_idx']]
 print(f"Using {len(valid_qa_pairs)} test questions")
 
 # Load probe questions for context and keep unfiltered version for indexing
-probes_df_original = pd.read_csv('data/probes_with_yn.csv')
+probes_df_original = pd.read_csv(f'data/{probe_file_name}.csv')
 probes_df = probes_df_original[~probes_df_original['probe_type'].isin(excluded_probe_types)]
 probe_questions = probes_df['probe'].tolist()
 print(f"Using {len(probe_questions)} probe questions (excluded: {excluded_probe_types})")
 
 # Load discriminability results
-with open(f'{save_path}/probe_analysis/{questions_data_name}/prompt{prompt_index}/discriminability_results.json', 'r') as f:
+with open(f'{save_path}/probe_analysis/{probe_file_name}/yn/{questions_data_name}/prompt{prompt_index}/discriminability_results.json', 'r') as f:
     discriminability_data = json.load(f)
 
 # Get top discriminative probes (excluding filtered probe types)
@@ -241,7 +247,7 @@ for N in context_lengths_desc:
     print(f"{'='*80}")
 
     # Generate all context materials for this sample
-    context_materials = get_context(N)
+    all_context_materials = [get_context(N) for _ in range(n_samples)]
     
     for context_type in context_types:
         print(f"\nTesting context type: {context_type}")
@@ -254,6 +260,8 @@ for N in context_lengths_desc:
         question_lie_probs_across_samples_excl_yn = np.full((len(valid_qa_pairs), n_samples), np.nan)
         
         for sample_idx in tqdm(range(n_samples)):
+
+            context_materials = all_context_materials[sample_idx]
             
             # Get the specific questions and answers for this context type
             if N == 0:
@@ -504,12 +512,12 @@ for N in context_lengths_desc:
     axes[1].grid(True, alpha=0.3)
     axes[2].grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f'{save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_analysis.png', 
+    plt.savefig(f'{output_path}/context_effect_analysis.png', 
                dpi=300, bbox_inches='tight')
     plt.close()  # Close to save memory
     
     # Save detailed results so far
-    with open(f'{save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_results.json', 'w') as f:
+    with open(f'{output_path}/context_effect_results.json', 'w') as f:
         json.dump(all_results, f)
 
     print(f"Results updated and saved after N={N}")
@@ -517,5 +525,6 @@ for N in context_lengths_desc:
 
 print("Analysis complete!")
 print("Results saved to:")
-print(f"  - {save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_results.csv")
+print(f"  - {output_path}/context_effect_results.csv")
 print(f"  - Individual CSV files for each context type")
+
