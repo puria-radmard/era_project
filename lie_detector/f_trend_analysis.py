@@ -17,9 +17,12 @@ questions_data_name = args.questions_data_name
 prompt_index = args.prompt_idx
 sorting_key = args.icl_sorting_key
 
+probe_file_name = args.probe_file_name
+probe_response_type = args.probe_response_type
+
 # Define paths
-context_results_path = f'{save_path}/in_context_learning/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_results.json'
-data_path = f"{save_path}/activation_discovery/{questions_data_name}/prompt{prompt_index}"
+context_results_path = f"{save_path}/in_context_learning/{probe_file_name}/{probe_response_type}/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_results.json"
+data_path = f"{save_path}/activation_discovery/contextual/{probe_file_name}/{probe_response_type}/{questions_data_name}/prompt{prompt_index}"
 prompted_activations_projections_path = os.path.join(data_path, 'prompted_projection_along_average_lie_vector.npy')
 contextual_activations_projections_path = os.path.join(data_path, 'contextual_projection_along_average_lie_vector.npy')
 

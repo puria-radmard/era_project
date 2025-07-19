@@ -204,7 +204,7 @@ for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_
         test_context_projections = np.zeros((len(test_indices), n_layers))
         test_context_projections_control = np.zeros((len(test_indices), num_controls, n_layers))
 
-        for layer in range(n_layers):
+        for layer in tqdm(range(n_layers)):
 
             contextual_axes[0, layer].set_title(f'Layer = {layer + 1}')
             
@@ -223,7 +223,7 @@ for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_
             'projections': test_context_projections,
             'control_projections': test_context_projections_control
         })
-        np.save(os.path.join(save_target, 'contextual_projection_along_average_lie_vector.npy'), all_contextual_data)
+    np.save(os.path.join(save_target, 'contextual_projection_along_average_lie_vector.npy'), all_contextual_data)
 
     contextual_axes[cli,-1].legend(title = 'Context type')
     contextual_axes_control[cli,-1].legend(title = 'Context type')

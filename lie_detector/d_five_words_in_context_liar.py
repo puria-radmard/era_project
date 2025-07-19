@@ -11,6 +11,7 @@ from scipy.stats import ttest_rel
 
 from model.load import load_model
 from util.elicit import elicit_next_token_probs
+from util.lying_context import get_context_five_words
 
 from util.util import YamlConfig
 
@@ -197,56 +198,6 @@ context_types = [
     'top_questions_random_answers',     # 5alt. Top questions + 50/50 random answers
 ]
 
-def get_context(N: int):
-    """Generate all base context materials for one sample."""
-    
-    if N == 0:
-        return {}
-    
-    # Get top N discriminative probes
-    top_n_probe_data = valid_probe_results[:N]
-    top_n_questions = [probes_df_original.iloc[original_idx]['probe'] for original_idx, _ in top_n_probe_data]
-    
-    # Generate truth-inducing answers (opposite of lie-inducing based on effect size)
-    truth_inducing_answers = []
-    lie_inducing_answers = []
-    for original_idx, result in top_n_probe_data:
-
-        truth_answer = most_truth_answers[original_idx]
-        lie_answer = most_lie_answers[original_idx]
-
-        truth_inducing_answers.append(truth_answer)
-        lie_inducing_answers.append(lie_answer)
-
-    # Signal truth and lie
-    top_questions_shuffled = top_n_questions.copy()
-    top_answers_shuffled = truth_inducing_answers.copy()
-    lie_answers_shuffled = lie_inducing_answers.copy()
-    combined_truth_qa = list(zip(top_questions_shuffled, top_answers_shuffled, lie_answers_shuffled))
-    random.shuffle(combined_truth_qa)
-    
-    top_questions_shuffled, truth_answers_shuffled, lie_answers_shuffled = zip(*combined_truth_qa)
-    top_questions_shuffled = list(top_questions_shuffled)
-    truth_answers_shuffled = list(truth_answers_shuffled)
-    lie_answers_shuffled = list(lie_answers_shuffled)
-
-    # Generate a random 50/50 mix of truth and lie answers
-    random50_answers = [
-        truth_answers_shuffled[i] if random.random() < 0.5 else lie_answers_shuffled[i]
-        for i in range(len(truth_answers_shuffled))
-    ]
-
-    return {
-        # Type 1: Top questions + lie answers, shuffled together
-        'top_lie_shuffled_together': (top_questions_shuffled, lie_answers_shuffled),
-        
-        # Type 2: Top questions + truth answers, shuffled together  
-        'top_truth_shuffled_together': (top_questions_shuffled, truth_answers_shuffled),
-
-        # Type 5alt. Top questions + 50/50 random answers
-        'top_questions_random_answers': (top_questions_shuffled, random50_answers)
-    }
-
 # Results storage
 all_results = {context_type: [] for context_type in context_types}
 
@@ -259,7 +210,7 @@ for N in context_lengths_desc:
     print(f"{'='*80}")
 
     # Generate all context materials for this sample
-    all_context_materials = [get_context(N) for _ in range(n_samples)]
+    all_context_materials = [get_context_five_words(N, valid_probe_results, probes_df_original, most_truth_answers, most_lie_answers) for _ in range(n_samples)]
     
     for context_type in context_types:
         print(f"\nTesting context type: {context_type}")

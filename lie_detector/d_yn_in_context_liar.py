@@ -12,6 +12,7 @@ from scipy.stats import ttest_rel
 from model.load import load_model
 from util.elicit import elicit_next_token_probs
 
+from util.lying_context import get_context_yn
 from util.util import YamlConfig
 
 import sys
@@ -168,73 +169,6 @@ context_types = [
     'top_questions_random_answers',     # 5alt. Top questions + 50/50 random answers
 ]
 
-def get_context(N: int):
-    """Generate all base context materials for one sample."""
-    
-    if N == 0:
-        return {}
-    
-    # Get top N discriminative probes
-    top_n_probe_data = valid_probe_results[:N]
-    top_n_questions = [probes_df_original.iloc[original_idx]['probe'] for original_idx, _ in top_n_probe_data]
-    
-    # Generate truth-inducing answers (opposite of lie-inducing based on effect size)
-    truth_inducing_answers = []
-    for original_idx, result in top_n_probe_data:
-        effect_size = result['effect_size']
-        if effect_size > 0:
-            # Positive effect: truth=1 higher than truth=0, so "Yes" induces truth, "No" induces lies
-            truth_answer = "Yes."
-        else:
-            # Negative effect: truth=0 higher than truth=1, so "No" induces truth, "Yes" induces lies  
-            truth_answer = "No."
-        truth_inducing_answers.append(truth_answer)
-
-    # Signal truth and lie
-    top_questions_shuffled = top_n_questions.copy()
-    top_answers_shuffled = truth_inducing_answers.copy()
-    combined_truth_qa = list(zip(top_questions_shuffled, top_answers_shuffled))
-    random.shuffle(combined_truth_qa)
-    top_questions_shuffled, truth_answers_shuffled = zip(*combined_truth_qa)
-    top_questions_shuffled = list(top_questions_shuffled)
-    truth_answers_shuffled = list(truth_answers_shuffled)
-
-    lie_answers_shuffled = ["No." if ans == "Yes." else "Yes." for ans in truth_answers_shuffled]
-
-    # Shuffle only the questions
-    top_questions_shuffled_control = top_questions_shuffled.copy()
-    random.shuffle(top_questions_shuffled_control)
-    top_questions_shuffled_control = list(top_questions_shuffled_control)
-
-    # Random questions for types 5 and 6
-    # random_questions = random.sample(probe_questions, min(N, len(probe_questions)))
-
-    # Random answers for type 5alt
-    random50_answers = ["Yes." if random.random() < 0.5 else "No." for _ in truth_answers_shuffled]
-    
-    return {
-        # Type 1: Top questions + lie answers, shuffled together
-        'top_lie_shuffled_together': (top_questions_shuffled, lie_answers_shuffled),
-        
-        # Type 2: Top questions + truth answers, shuffled together  
-        'top_truth_shuffled_together': (top_questions_shuffled, truth_answers_shuffled),
-        
-        # Type 3: Top questions shuffled independently + lie answers in same order as type 1
-        'top_lie_questions_shuffled': (top_questions_shuffled_control, lie_answers_shuffled),
-        
-        # Type 4: Top questions shuffled independently + truth answers in same order as type 2
-        'top_truth_questions_shuffled': (top_questions_shuffled_control, truth_answers_shuffled),
-        
-        # # Type 5: Random questions + lie answers in same order as type 1
-        # 'random_lie_answers': (random_questions, lie_answers_shuffled),
-        
-        # # Type 6: Random questions + truth answers in same order as type 2
-        # 'random_truth_answers': (random_questions, truth_answers_shuffled)
-
-        # Type 5alt. Top questions + 50/50 random answers
-        'top_questions_random_answers': (top_questions_shuffled, random50_answers)
-    }
-
 # Results storage
 all_results = {context_type: [] for context_type in context_types}
 
@@ -247,7 +181,7 @@ for N in context_lengths_desc:
     print(f"{'='*80}")
 
     # Generate all context materials for this sample
-    all_context_materials = [get_context(N) for _ in range(n_samples)]
+    all_context_materials = [get_context_yn(N, valid_probe_results, probes_df_original) for _ in range(n_samples)]
     
     for context_type in context_types:
         print(f"\nTesting context type: {context_type}")
