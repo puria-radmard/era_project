@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import pandas as pd
 import numpy as np
 import json
@@ -11,8 +9,8 @@ from scipy.stats import ttest_rel
 
 from model.load import load_model
 from util.elicit import elicit_next_token_probs
-
 from util.lying_context import get_context_yn
+
 from util.util import YamlConfig
 
 import sys
@@ -27,7 +25,11 @@ batch_size = args.batch_size
 system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-save_path = args.save_path
+question_instruction = args.question_instruction
+
+initial_answers_args_name = args.initial_answers_args_name
+probe_responses_args_name = args.probe_responses_args_name
+probe_analysis_args_name = args.probe_analysis_args_name
 
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
@@ -42,24 +44,25 @@ n_samples = args.samples_per_context_length
 excluded_probe_types = args.excluded_probe_types
 sorting_key = args.icl_sorting_key
 
-chat_wrapper = load_model(model_name, device='auto')
-
 # Prepare for saving results
-output_path = f"{save_path}/in_context_learning/{probe_file_name}/yn/{questions_data_name}/prompt{prompt_index}/{sorting_key}"
+output_path = os.path.join('lie_detector_results/d_in_context_lying', args.args_name)
 os.makedirs(output_path, exist_ok=True)
+args.save_args(output_path)
 
 # 1. Load original answers dataframe
 print("Loading original answers...")
-original_answers_df = pd.read_csv(f'{save_path}/initial_answers/{questions_data_name}.csv')
+initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', initial_answers_args_name, 'initial_answers.csv')
+initial_answers_df = pd.read_csv(initial_answers_path)
 
 # 2. Load probe results dataframe  
-probe_results_df = pd.read_csv(f'{save_path}/probe_answers/{probe_file_name}/yn/{questions_data_name}_probe_prompt{prompt_index}.csv')
+probe_responses_path = os.path.join('lie_detector_results/b_probe_answers', probe_responses_args_name, 'probe_response.csv')
+probe_results_df = pd.read_csv(probe_responses_path)
 
-# 3. Filter original_answers_df to prompt_idx and question_idx in probe data
+# 3. Filter initial_answers_df to prompt_idx and question_idx in probe data
 valid_question_ids = set(probe_results_df['question_idx'].unique())
-filtered_answers_df = original_answers_df[
-    (original_answers_df['prompt_idx'] == prompt_index) & 
-    (original_answers_df['question_idx'].isin(valid_question_ids))
+filtered_answers_df = initial_answers_df[
+    (initial_answers_df['prompt_idx'] == prompt_index) & 
+    (initial_answers_df['question_idx'].isin(valid_question_ids))
 ].copy()
 
 print(f"Filtered to {len(filtered_answers_df)} questions")
@@ -83,7 +86,8 @@ probe_questions = probes_df['probe'].tolist()
 print(f"Using {len(probe_questions)} probe questions (excluded: {excluded_probe_types})")
 
 # Load discriminability results
-with open(f'{save_path}/probe_analysis/{probe_file_name}/yn/{questions_data_name}/prompt{prompt_index}/discriminability_results.json', 'r') as f:
+discriminability_data_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'discriminability_results.json')
+with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
 
 # Get top discriminative probes (excluding filtered probe types)
@@ -99,6 +103,8 @@ else:
     valid_probe_results.sort(key=lambda x: abs(x[1][sorting_key]), reverse=True)
 
 print(f"Found {len(valid_probe_results)} valid discriminative probes")
+
+chat_wrapper = load_model(model_name, device='auto')
 
 # FILTERING STAGE 1: Filter by single-token truth answers
 print("Filtering for single-token truth answers...")
@@ -221,6 +227,10 @@ for N in context_lengths_desc:
             for i in range(0, len(test_questions), batch_size):
                 
                 batch_questions = test_questions[i:i+batch_size]
+
+                import pdb; pdb.set_trace()
+
+                batch_questions = [bq + f' {question_instruction}' for bq in batch_questions]
                 
                 # Call elicit_next_token_probs
                 result = elicit_next_token_probs(
@@ -446,12 +456,11 @@ for N in context_lengths_desc:
     axes[1].grid(True, alpha=0.3)
     axes[2].grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f'{output_path}/context_effect_analysis.png', 
-               dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(output_path, 'context_effect_analysis.png'), dpi=300, bbox_inches='tight')
     plt.close()  # Close to save memory
     
     # Save detailed results so far
-    with open(f'{output_path}/context_effect_results.json', 'w') as f:
+    with open(os.path.join(output_path, 'context_effect_results.json'), 'w') as f:
         json.dump(all_results, f)
 
     print(f"Results updated and saved after N={N}")

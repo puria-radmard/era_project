@@ -11,18 +11,26 @@ import torch
 config_path = sys.argv[1]
 args = YamlConfig(config_path)
 
-batch_size = args.batch_size
 system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-save_path = args.save_path
+
+initial_answers_args_name = args.initial_answers_args_name
+question_instruction = args.question_instruction
 
 prompt_index = args.prompt_idx
 
+save_base = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'prompted')
+os.makedirs(save_base, exist_ok=True)
+args.save_args(save_base)
 
-response_data = pd.read_csv(f'{save_path}/initial_answers/{questions_data_name}.csv')
+initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', initial_answers_args_name, 'initial_answers.csv')
+probe_response_path = os.path.join(save_base, 'probe_response.csv')
+
+response_data = pd.read_csv(initial_answers_path)
 with open(f'data/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
+
 
 # Calculate the average of 'told_lie' where 'knows_answer' and 'told_truth' are True, grouped by 'prompt_idx'
 knows_answer = response_data[(response_data['knows_answer']) & (response_data['told_truth'])]
@@ -54,9 +62,11 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
     question = question_data['question'][f'{qai}'].strip()
     response_row = trainable_answers[trainable_answers['question_idx'] == qai]
 
+    question_instruction
+
     truth_chat = chat_wrapper.format_chat(
         system_prompt=system_prompt,
-        user_message=f'{truth_prompt} {question}',
+        user_message=f'{truth_prompt} {question} {question_instruction}',
         prefiller = ''
     )
     truth_outputs = chat_wrapper.forward(
@@ -66,7 +76,7 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
 
     lie_chat = chat_wrapper.format_chat(
         system_prompt=system_prompt,
-        user_message=f'{lie_prompt} {question}',
+        user_message=f'{lie_prompt} {question} {question_instruction}',
         prefiller = ''
     )
     lie_outputs = chat_wrapper.forward(
@@ -80,8 +90,5 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
 
 
 
-save_target = f"{save_path}/activation_discovery/prompted/{questions_data_name}/prompt{prompt_index}"
-os.makedirs(save_target, exist_ok=True)
-
-torch.save(all_truth_residual, os.path.join(save_target, 'all_truth_residual_with_question.pt'))
-torch.save(all_lie_residual, os.path.join(save_target, 'all_lie_residual_with_question.pt'))
+torch.save(all_truth_residual, os.path.join(save_base, 'all_truth_residual_with_question.pt'))
+torch.save(all_lie_residual, os.path.join(save_base, 'all_lie_residual_with_question.pt'))

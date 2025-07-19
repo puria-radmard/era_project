@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import pandas as pd
 import numpy as np
 import json
@@ -9,7 +7,7 @@ import random
 
 from model.load import load_model
 
-from util.lying_context import get_context_five_words, get_context_yn
+from util.lying_context import get_context_freeform, get_context_yn
 from util.util import YamlConfig
 
 import sys
@@ -24,7 +22,11 @@ batch_size = args.batch_size
 system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-save_path = args.save_path
+question_instruction = args.question_instruction
+
+initial_answers_args_name = args.initial_answers_args_name
+probe_responses_args_name = args.probe_responses_args_name
+probe_analysis_args_name = args.probe_analysis_args_name
 
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
@@ -40,23 +42,29 @@ sorting_key = args.icl_sorting_key
 chat_wrapper = load_model(model_name, device='auto')
 
 # Prepare for saving results
-save_target = f"{save_path}/activation_discovery/contextual/{probe_file_name}/{probe_response_type}/{questions_data_name}/prompt{prompt_index}"
-os.makedirs(save_target, exist_ok=True)
+output_path = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'contextual')
+os.makedirs(output_path, exist_ok=True)
+args.save_args(output_path)
+
 
 
 # 1. Load original answers dataframe
 print("Loading original answers...")
-original_answers_df = pd.read_csv(f'{save_path}/initial_answers/{questions_data_name}.csv')
+initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', initial_answers_args_name, 'initial_answers.csv')
+initial_answers_df = pd.read_csv(initial_answers_path)
 
 # 2. Load probe results dataframe  
-probe_results_df = pd.read_csv(f'{save_path}/probe_answers/{probe_file_name}/{probe_response_type}/{questions_data_name}_probe_prompt{prompt_index}.csv')
+probe_responses_path = os.path.join('lie_detector_results/b_probe_answers', probe_responses_args_name, 'probe_response.csv')
+probe_results_df = pd.read_csv(probe_responses_path)
 
-# 3. Filter original_answers_df to prompt_idx and question_idx in probe data
+# 3. Filter initial_answers_df to prompt_idx and question_idx in probe data
 valid_question_ids = set(probe_results_df['question_idx'].unique())
-filtered_answers_df = original_answers_df[
-    (original_answers_df['prompt_idx'] == prompt_index) & 
-    (original_answers_df['question_idx'].isin(valid_question_ids))
+filtered_answers_df = initial_answers_df[
+    (initial_answers_df['prompt_idx'] == prompt_index) & 
+    (initial_answers_df['question_idx'].isin(valid_question_ids))
 ].copy()
+
+print(f"Filtered to {len(filtered_answers_df)} questions")
 
 # 4. Load questions data and create QA pairs
 print("Loading test questions...")
@@ -65,6 +73,7 @@ with open(f'data/{questions_data_name}.json', 'r') as f:
 
 qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) 
             for idx in range(len(question_data['question']))]
+
 
 # Filter QA pairs to only include questions we have in filtered_answers_df
 valid_qa_pairs = [qa_pairs[idx] for idx in filtered_answers_df['question_idx']]
@@ -77,13 +86,15 @@ probes_df_original = pd.read_csv(f'data/{probe_file_name}.csv')
 probes_df = probes_df_original[~probes_df_original['probe_type'].isin(excluded_probe_types)]
 
 # Load discriminability results
-with open(f'{save_path}/probe_analysis/{probe_file_name}/{probe_response_type}/{questions_data_name}/prompt{prompt_index}/discriminability_results.json', 'r') as f:
+discriminability_data_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'discriminability_results.json')
+with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
 
-
 # Load also the BERT projections for each answer
-bert_lie_proj = np.load(f'{save_path}/probe_analysis/{probe_file_name}/five_words/{questions_data_name}/prompt{prompt_index}/probe_response_bert_proj.npy')
+bert_lie_proj_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'probe_response_bert_proj.npy')
+bert_lie_proj = np.load(bert_lie_proj_path)
 assert len(bert_lie_proj) == len(probe_results_df)
+
 
 most_truth_answers = {}
 most_lie_answers = {}
@@ -133,13 +144,8 @@ context_types = [
 
 
 
-
-response_data = pd.read_csv(f'{save_path}/initial_answers/{questions_data_name}.csv')
-with open(f'data/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
-
 # Calculate the average of 'told_lie' where 'knows_answer' and 'told_truth' are True, grouped by 'prompt_idx'
-knows_answer = response_data[(response_data['knows_answer']) & (response_data['told_truth'])]
+knows_answer = initial_answers_df[(initial_answers_df['knows_answer']) & (initial_answers_df['told_truth'])]
 
 # Get questions which reliably truthed and lied
 trainable_answers = knows_answer[(knows_answer['prompt_idx'] == prompt_index) & (knows_answer['told_lie'])]
@@ -167,8 +173,8 @@ for iN, N in enumerate(context_lengths_desc):
     # Generate all context materials for this sample
     if probe_response_type == 'yn':
         all_context_materials = [get_context_yn(N, valid_probe_results) for _ in range(n_samples)]
-    elif probe_response_type == 'five_words':
-        all_context_materials = [get_context_five_words(N, valid_probe_results, probes_df_original, most_truth_answers, most_lie_answers) for _ in range(n_samples)]
+    elif probe_response_type.endswith('_words'):
+        all_context_materials = [get_context_freeform(N, valid_probe_results, probes_df_original, most_truth_answers, most_lie_answers) for _ in range(n_samples)]
 
     
     for context_type in context_types:
@@ -198,9 +204,11 @@ for iN, N in enumerate(context_lengths_desc):
                 
                 batch_questions = test_questions[i:i+batch_size]
 
+                import pdb; pdb.set_trace()
+
                 question_chats = [chat_wrapper.format_chat(
                     system_prompt=None,
-                    user_message=question,
+                    user_message=question + f' {question_instruction}',
                     prefiller = ''
                 ) for question in batch_questions]
 
@@ -215,4 +223,4 @@ for iN, N in enumerate(context_lengths_desc):
                 for cli, layer_idx in enumerate(candidate_layers):
                     residuals_per_N_per_context[i:i+batch_size, sample_idx, cli, :] = context_hs[layer_idx + 1].cpu().numpy()[:,-1,:]
 
-        torch.save(residuals_per_N_per_context, os.path.join(save_target, f'all_contextual_residual_without_question_N{N}_context{context_type}.pt'))
+        torch.save(residuals_per_N_per_context, os.path.join(output_path, f'all_contextual_residual_without_question_N{N}_context{context_type}.pt'))

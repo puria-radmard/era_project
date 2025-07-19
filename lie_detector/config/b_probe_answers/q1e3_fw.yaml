@@ -1,0 +1,8 @@
+system_prompt: null
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+initial_answers_args_name: q1e3_fw
+questions_data_name: "questions_1000_all"
+question_instruction: "Answer with one word."
+probe_file_name: "probes_with_ten_words_reduced"
+probe_response_type: "ten_words"
+prompt_idx: 8

@@ -13,9 +13,16 @@ args = YamlConfig(config_path)
 
 batch_size = args.batch_size
 system_prompt = args.system_prompt
+question_instruction = args.question_instruction
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-save_path = args.save_path
+prompt_idx = args.prompt_idx
+
+
+save_base = os.path.join('lie_detector_results/a_initial_answers', args.args_name)
+os.makedirs(save_base, exist_ok=True)
+args.save_args(save_base)
+initial_answers_df_path = os.path.join(save_base, "initial_answers.csv")
 
 
 # Load prompts
@@ -72,10 +79,11 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
         formatted_truth_chats = [
             chat_wrapper.format_chat(
                 system_prompt=system_prompt,
-                user_message=f'{truth_prompt} {qa_pair[0]}',
+                user_message=f'{truth_prompt} {qa_pair[0]} {question_instruction}',
                 prefiller=""
             ) for qa_pair in batch_qa_pairs
         ]
+        import pdb; pdb.set_trace()
         
         truth_answers = chat_wrapper.generate_parallel(
             chats=formatted_truth_chats,
@@ -90,7 +98,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
         formatted_lie_chats = [
             chat_wrapper.format_chat(
                 system_prompt=system_prompt,
-                user_message=f'{lie_prompt} {qa_pair[0]}',
+                user_message=f'{lie_prompt} {qa_pair[0]} {question_instruction}',
                 prefiller=""
             ) for qa_pair in batch_qa_pairs
         ]
@@ -131,7 +139,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
         
         # Save DataFrame after each prompt iteration
         df = pd.DataFrame(results)
-        df.to_csv(f'{save_path}/initial_answers/{questions_data_name}.csv', index=False)
+        df.to_csv(initial_answers_df_path, index=False)
         
         # Print summary statistics after each prompt iteration
         print(f"\n  === Summary after prompt pair {prompt_idx + 1} ===")
@@ -177,7 +185,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
 
 # Final summary
 print(f"\n🎉 FINAL RESULTS 🎉")
-print(f"Results saved to {save_path}/initial_answers/{questions_data_name}.csv")
+print(f"Results saved to {initial_answers_df_path}")
 print(f"Total rows: {len(df)}")
 
 print(f"\nFinal Summary Statistics:")

@@ -15,7 +15,6 @@ batch_size = args.batch_size
 system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-save_path = args.save_path
 
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
@@ -23,12 +22,17 @@ probe_response_type = args.probe_response_type
 prompt_index = args.prompt_idx
 
 # Save directory should already be made
-save_target = f"{save_path}/activation_discovery/contextual/{probe_file_name}/{probe_response_type}/{questions_data_name}/prompt{prompt_index}"
+prompted_results_path = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'prompted')
+contextual_results_path = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'contextual')
+
+# Create place to save results from this analysis
+save_base = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'projection_results')
+os.makedirs(save_base, exist_ok=True)
+args.save_args(save_base)
 
 # Both [questions, layers, neurons]
-prompted_data_path = f"{save_path}/activation_discovery/prompted/{questions_data_name}/prompt{prompt_index}"
-all_truth_residual = torch.load(os.path.join(prompted_data_path, 'all_truth_residual_with_question.pt'))
-all_lie_residual = torch.load(os.path.join(prompted_data_path, 'all_lie_residual_with_question.pt'))
+all_truth_residual = torch.load(os.path.join(prompted_results_path, 'all_truth_residual_with_question.pt'))
+all_lie_residual = torch.load(os.path.join(prompted_results_path, 'all_lie_residual_with_question.pt'))
 
 # For labelling
 candidate_layers = list(range(32))
@@ -108,7 +112,7 @@ for layer in range(n_layers):
     print(f"Layer {layer}: Truth={np.mean(truth_projs):.3f}, Lie={np.mean(lie_projs):.3f}, "
           f"Cohen's d={cohens_d:.3f}, p={p_value:.3f}")
 
-    np.save(os.path.join(save_target, 'prompted_projection_along_average_lie_vector.npy'), results)
+    np.save(os.path.join(save_base, 'prompted_projection_along_average_lie_vector.npy'), results)
 
 
 # Visualization
@@ -128,7 +132,7 @@ for layer in range(n_layers):  # Show first 25 layers
     ax.set_ylabel('Frequency')
 
 plt.tight_layout()
-plt.savefig(os.path.join(save_target, 'projection_along_average_lie_vector.png'))
+plt.savefig(os.path.join(save_base, 'projection_along_average_lie_vector.png'))
 
 
 
@@ -149,7 +153,7 @@ for layer in range(n_layers):  # Show first 25 layers
     ax.set_ylabel('Frequency')
 
 plt.tight_layout()
-plt.savefig(os.path.join(save_target, 'projection_along_control_vector.png'))
+plt.savefig(os.path.join(save_base, 'projection_along_control_vector.png'))
 
 
 
@@ -193,7 +197,7 @@ for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_
     for context_type in context_types:
 
         # [num_questions, n_samples, num_candidate_layers, residual_stream_sizes]
-        context_driven_residuals = torch.load(os.path.join(save_target, f'all_contextual_residual_without_question_N{context_length}_context{context_type}.pt'), weights_only=False)
+        context_driven_residuals = torch.load(os.path.join(contextual_results_path, f'all_contextual_residual_without_question_N{context_length}_context{context_type}.pt'), weights_only=False)
 
         # [test_questions, n_samples, num_candidate_layers, residual_stream_sizes]
         test_context_driven_residuals = context_driven_residuals[test_indices]
@@ -223,13 +227,13 @@ for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_
             'projections': test_context_projections,
             'control_projections': test_context_projections_control
         })
-    np.save(os.path.join(save_target, 'contextual_projection_along_average_lie_vector.npy'), all_contextual_data)
+    np.save(os.path.join(save_base, 'contextual_projection_along_average_lie_vector.npy'), all_contextual_data)
 
     contextual_axes[cli,-1].legend(title = 'Context type')
     contextual_axes_control[cli,-1].legend(title = 'Context type')
 
-    fig.savefig(os.path.join(save_target, 'contextual_projection_along_average_lie_vector.png'))
-    fig_control.savefig(os.path.join(save_target, 'contextual_projection_along_control_vector.png'))
+    fig.savefig(os.path.join(save_base, 'contextual_projection_along_average_lie_vector.png'))
+    fig_control.savefig(os.path.join(save_base, 'contextual_projection_along_control_vector.png'))
 
 
 

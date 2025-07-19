@@ -25,20 +25,15 @@ import os
 config_path = sys.argv[1]
 args = YamlConfig(config_path)
 
-batch_size = args.batch_size
-system_prompt = args.system_prompt
-questions_data_name = args.questions_data_name
-model_name = args.model_name
-save_path = args.save_path
-
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
+probe_responses_args_name = args.probe_responses_args_name
+n_samples = args.samples_per_classifier_size
+prompt_index = args.prompt_idx
 
 assert probe_response_type == 'yn'
 
-prompt_index = args.prompt_idx
 
-n_samples = args.samples_per_classifier_size
 
 
 
@@ -77,20 +72,20 @@ def experiment_single_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_value: int
 
 
 if __name__ == "__main__":
-    
-    # Load data
-    results_path = f"{save_path}/probe_answers/{probe_file_name}/yn/{questions_data_name}_probe_prompt{prompt_index}.csv"
-    probes_path = f"data/{probe_file_name}.csv"
 
     # Prepare for saving results
-    output_path = f'{save_path}/probe_analysis/{probe_file_name}/yn/{questions_data_name}/prompt{prompt_index}'
+    output_path = os.path.join('lie_detector_results/c_probe_discimination', args.args_name)
     os.makedirs(output_path, exist_ok=True)
+    args.save_args(output_path)
     
-    data = load_and_preprocess_data(results_path, probes_path)
-    probe_df = pd.read_csv(probes_path).reset_index().rename(columns={'index': 'probe_question_idx'})
+    # Load data
+    probe_responses_path = os.path.join('lie_detector_results/b_probe_answers', probe_responses_args_name, 'probe_response.csv')
+    probe_questions_path = f'data/{probe_file_name}.csv'
+    data = load_and_preprocess_data(probe_responses_path, probe_questions_path, calc_log_odds=False)
+    probe_df = pd.read_csv(probe_questions_path).reset_index().rename(columns={'index': 'probe_question_idx'})
     
     # Check prob_yes + prob_no sums
-    data_raw = pd.read_csv(results_path)
+    data_raw = pd.read_csv(probe_responses_path)
     prob_sums = data_raw['prob_yes'] + data_raw['prob_no']
     print(f"\nProb_yes + prob_no range: [{prob_sums.min():.6f}, {prob_sums.max():.6f}]")
     non_unity_probs = prob_sums[(prob_sums < 0.99) | (prob_sums > 1.01)]

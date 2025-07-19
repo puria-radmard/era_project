@@ -1,5 +1,6 @@
 import random
 import yaml
+import os
 
 def random_sample_excluding_indices(items, k, exclude_indices):
     """
@@ -26,6 +27,19 @@ class YamlConfig:
         with open(path, 'r') as f:
             config = yaml.safe_load(f)
         self._set_attrs(config)
+        self.args_name = os.path.splitext(os.path.basename(path))[0]
+
+    def to_dict(self, obj):
+        if isinstance(obj, YamlConfig):
+            return {k: self.to_dict(v) for k, v in obj.__dict__.items() if not k.startswith('_')}
+        elif hasattr(obj, '__dict__'):
+            return {k: self.to_dict(v) for k, v in obj.__dict__.items()}
+        else:
+            return obj
+
+    def save(self, path):
+        with open(os.path.join(path, 'args.yaml'), 'w') as f:
+            yaml.safe_dump(self.to_dict(self), f)
 
     def _set_attrs(self, config):
         for key, value in config.items():

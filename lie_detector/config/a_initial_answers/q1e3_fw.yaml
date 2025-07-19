@@ -1,0 +1,6 @@
+batch_size: 32
+system_prompt: null
+question_instruction: "Answer with one word."
+questions_data_name: "questions_1000_all"
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+prompt_idx: 8

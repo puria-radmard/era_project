@@ -1,0 +1,7 @@
+python lie_detector/a_initial_answers.py lie_detector/config/a_initial_answers/q1e3_fw.yaml
+python lie_detector/b_freeform_probe_questions.py lie_detector/config/b_probe_answers/q1e3_fw.yaml
+python lie_detector/c_freeform_analyse_probe_answers.py lie_detector/config/c_probe_discimination/q1e3_fw.yaml
+python lie_detector/d_freeform_in_context_liar.py lie_detector/config/d_in_context_lying/q1e3_fw.yaml
+python lie_detector/e1a_activation_extraction_prompted_question.py lie_detector/config/e_activation_analysis/q1e3_fw.yaml
+python lie_detector/e1b_activation_extraction_context.py lie_detector/config/e_activation_analysis/q1e3_fw.yaml
+python lie_detector/e2_activation_discovery.py lie_detector/config/e_activation_analysis/q1e3_fw.yaml

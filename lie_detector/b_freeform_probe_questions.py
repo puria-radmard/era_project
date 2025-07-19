@@ -11,21 +11,29 @@ import os, sys
 config_path = sys.argv[1]
 args = YamlConfig(config_path)
 
-batch_size = args.batch_size
 system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-save_path = args.save_path
+initial_answers_args_name = args.initial_answers_args_name
 
 probe_file_name = args.probe_file_name
-probe_response_type = args.probe_response_type
+probe_response_type: str = args.probe_response_type
+question_instruction = args.question_instruction
 
-assert probe_response_type == 'five_words'
+assert probe_response_type.endswith('five_words')
 
 prompt_index = args.prompt_idx
 
 
-response_data = pd.read_csv(f'{save_path}/initial_answers/{questions_data_name}.csv')
+save_base = os.path.join('lie_detector_results/b_probe_answers', args.args_name)
+os.makedirs(save_base, exist_ok=True)
+args.save_args(save_base)
+
+initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', initial_answers_args_name, 'initial_answers.csv')
+probe_response_path = os.path.join(save_base, 'probe_response.csv')
+
+
+response_data = pd.read_csv(initial_answers_path)
 with open(f'data/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
 
@@ -45,8 +53,6 @@ trainable_questions_idxs = trainable_answers['question_idx']
 # Get yes/no tokens which we'd like to search for
 chat_wrapper = load_model(model_name, device='auto')
 
-os.makedirs(f'{save_path}/probe_answers/{probe_file_name}/five_words', exist_ok=True)
-
 
 # Load in the probe questions
 probe_questions = pd.read_csv(f'data/{probe_file_name}.csv')['probe']
@@ -64,7 +70,7 @@ for qai in tqdm(trainable_questions_idxs):
     truth_followup_chats = [
         chat_wrapper.format_chat(
             system_prompt=system_prompt,
-            in_context_questions=[f'{truth_prompt} {question}'],
+            in_context_questions=[f'{truth_prompt} {question} {question_instruction}'],
             in_context_answers=[response_row.truth_answer.item()],
             user_message=probe_question,
             prefiller='',
@@ -81,7 +87,7 @@ for qai in tqdm(trainable_questions_idxs):
     lie_followup_chats = [
         chat_wrapper.format_chat(
             system_prompt=system_prompt,
-            in_context_questions=[f'{lie_prompt} {question}'],
+            in_context_questions=[f'{lie_prompt} {question} {question_instruction}'],
             in_context_answers=[response_row.lie_answer.item()],
             user_message=probe_question,
             prefiller='',
@@ -117,8 +123,5 @@ for qai in tqdm(trainable_questions_idxs):
         })
 
     probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
-    probe_results_df.to_csv(f'{save_path}/probe_answers/{probe_file_name}/five_words/{questions_data_name}_probe_prompt{prompt_index}.csv', index=False)
-
-
-
+    probe_results_df.to_csv(probe_response_path, index=False)
     

@@ -72,7 +72,7 @@ def get_context_yn(N: int, valid_probe_results, probes_df_original, ):
 
 
 
-def get_context_five_words(N: int, valid_probe_results, probes_df_original, most_truth_answers: Dict[str, str], most_lie_answers: Dict[str, str]):
+def get_context_freeform(N: int, valid_probe_results, probes_df_original, most_truth_answers: Dict[str, str], most_lie_answers: Dict[str, str]):
     """Generate all base context materials for one sample."""
     
     if N == 0:
