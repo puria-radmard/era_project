@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 
-import json
 import numpy as np
 import sys
 import os
 from scipy import stats
 from util.util import YamlConfig
 
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import glob
+
 # Load config
 config_path = sys.argv[1]
 args = YamlConfig(config_path)
 
 # Set up paths
-context_results_path = os.path.join('lie_detector_results/d_in_context_lying', args.args_name, 'context_effect_results.json')
+context_results_path = os.path.join('lie_detector_results/d_in_context_lying', args.args_name, 'context_effect_results_{context_type}.npy')
 projection_results_path = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'projection_results')
 
 # Define paths
@@ -21,8 +25,16 @@ contextual_activations_projections_path = os.path.join(projection_results_path, 
 
 # Load all data
 print("Loading data...")
-with open(context_results_path, 'r') as f:
-    context_results = json.load(f)
+context_results = {}
+pattern = context_results_path.replace('{context_type}', '*')
+for path in glob.glob(pattern):
+    # Extract context_type from filename
+    filename = os.path.basename(path)
+    prefix = 'context_effect_results_'
+    suffix = '.npy'
+    if filename.startswith(prefix) and filename.endswith(suffix):
+        context_type = filename[len(prefix):-len(suffix)]
+        context_results[context_type] = np.load(path, allow_pickle=True)
 
 prompted_activations_projections = np.load(prompted_activations_projections_path, allow_pickle=True).item()
 contextual_activations_projections = np.load(contextual_activations_projections_path, allow_pickle=True)
@@ -76,17 +88,16 @@ print(f"Available context types in behavioral data: {list(context_results.keys()
 
 # Iterate over context lengths
 for i_N, N in enumerate(context_lengths):
+
     print(f"\n{'='*60}")
     print(f"Processing context length N = {N}")
     print(f"{'='*60}")
     
     # Extract behavioral data for this N
     behavioral_data = {}
-    for context_type, results_list in context_results.items():
-        for result in results_list:
-            if result['context_length'] == N:
-                behavioral_data[context_type] = result
-                break
+    for context_type, context_type_results in context_results.items():
+        iN_in_file = context_type_results['context_length'].tolist().index(N)
+        behavioral_data[context_type] = {k: v[iN_in_file] for k, v in context_type_results.items()}
     
     print(f"Found behavioral data for {len(behavioral_data)} context types at N={N}")
     print(f"Behavioural context types: {list(behavioral_data.keys())}")
@@ -100,11 +111,11 @@ for i_N, N in enumerate(context_lengths):
         for i_pair, (pair_context_1, pair_context_2) in enumerate(more_pairs_to_compare):
             
             try:
-                question_truth_probs = np.array(behavioral_data[pair_context_1]['question_truth_probs'])
-                question_lie_probs = np.array(behavioral_data[pair_context_2]['question_truth_probs'])
+                question_truth_probs = np.array(behavioral_data[pair_context_1]['question_truth_probs_across_samples'].mean(-1))
+                question_lie_probs = np.array(behavioral_data[pair_context_2]['question_truth_probs_across_samples'].mean(-1))
             except KeyError:
-                question_truth_probs = np.array(behavioral_data[pair_context_1]['question_truth_lie_diffs'])
-                question_lie_probs = np.array(behavioral_data[pair_context_2]['question_truth_lie_diffs'])
+                question_truth_probs = np.array(behavioral_data[pair_context_1]['question_truth_lie_diffs_across_samples'].mean(-1))
+                question_lie_probs = np.array(behavioral_data[pair_context_2]['question_truth_lie_diffs_across_samples'].mean(-1))
 
 
             try:
@@ -197,11 +208,6 @@ for i_N, N in enumerate(context_lengths_activations):
 
             control_activations_mean_diffs[i_pair, i_N] = control_contextual_mean_diff
             control_activations_ttest_stats[i_pair, i_N] = t_stat_control_proj
-
-
-import matplotlib.pyplot as plt
-import numpy as np
-import os
 
 
 # ==============================================

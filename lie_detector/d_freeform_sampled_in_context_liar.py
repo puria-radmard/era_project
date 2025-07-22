@@ -145,13 +145,22 @@ context_types = [
     # 'top_questions_random_answers',       # XXX: removing controls for now!
 ]
 
+num_context_lengths = len(context_lengths)
+
 # Results storage
-all_results = {context_type: [] for context_type in context_types}
+all_results = {context_type: {
+    'context_length': np.full((num_context_lengths, ), np.nan),
+    'context_type': [None] * num_context_lengths,
+    'mean_truth_lie_diff': np.full((num_context_lengths, ), np.nan),
+    'std_truth_lie_diff': np.full((num_context_lengths, ), np.nan),
+    'question_truth_lie_diffs_across_samples': np.full((num_context_lengths, len(unique_questions), n_samples), np.nan),
+    } for context_type in context_types
+}
 
 # Process each context length
 context_lengths_desc = sorted(context_lengths, reverse=True)
 
-for N in context_lengths_desc:
+for iN, N in enumerate(context_lengths_desc):
     print(f"\n{'='*80}")
     print(f"TESTING CONTEXT LENGTH N={N}")
     print(f"{'='*80}")
@@ -235,21 +244,16 @@ for N in context_lengths_desc:
                 truth_lie_diff = avg_truth_log_prob - avg_lie_log_prob
                 
                 question_truth_lie_diffs_across_samples[q_idx_pos, sample_idx] = truth_lie_diff
-        
-        # Average differences across samples for each question
-        question_avg_diffs = np.nanmean(question_truth_lie_diffs_across_samples, axis=1)
-        
+                
         # Store results
-        all_results[context_type].append({
-            'context_length': N,
-            'context_type': context_type,
-            'mean_truth_lie_diff': float(np.mean(question_avg_diffs)),
-            'std_truth_lie_diff': float(np.std(question_avg_diffs)),
-            'question_truth_lie_diffs': [float(q) for q in question_avg_diffs],
-        })
+        all_results[context_type]['context_length'][iN] = N
+        all_results[context_type]['context_type'][iN] = context_type
+        all_results[context_type]['mean_truth_lie_diff'][iN] = np.mean(question_truth_lie_diffs_across_samples)
+        all_results[context_type]['std_truth_lie_diff'][iN] = np.std(question_truth_lie_diffs_across_samples.mean(-1))
+        all_results[context_type]['question_truth_lie_diffs_across_samples'][iN] = question_truth_lie_diffs_across_samples
         
-        print(f"{context_type} results for {len(question_avg_diffs)} questions:")
-        print(f"  Mean truth-lie log prob diff: {np.mean(question_avg_diffs):.4f} ± {np.std(question_avg_diffs):.4f}")
+        print(f"{context_type} results for {len(question_truth_lie_diffs_across_samples)} questions:")
+        print(f"  Mean truth-lie log prob diff: {all_results[context_type]['mean_truth_lie_diff'][iN]:.4f} ± {all_results[context_type]['std_truth_lie_diff'][iN]:.4f}")
 
     # Plot results after completing all context types for this N
     print(f"\nPlotting results after N={N}...")
@@ -274,27 +278,21 @@ for N in context_lengths_desc:
                     color=colors[i], alpha=0.8)
 
     # Add significance testing between lie and truth contexts
-    if len(all_results['top_lie_shuffled_together']) > 0 and len(all_results['top_truth_shuffled_together']) > 0:
-        lie_results = all_results['top_lie_shuffled_together']
-        truth_results = all_results['top_truth_shuffled_together']
+    lie_results = all_results['top_lie_shuffled_together']
+    truth_results = all_results['top_truth_shuffled_together']
+    
+    for N_current, lie_diffs, truth_diffs in zip(context_lengths_desc, lie_results, truth_results):
         
-        for lie_result, truth_result in zip(lie_results, truth_results):
-            if lie_result['context_length'] == truth_result['context_length']:
-                N_current = lie_result['context_length']
-                
-                lie_diffs = lie_result['question_truth_lie_diffs']
-                truth_diffs = truth_result['question_truth_lie_diffs']
-                
-                if len(lie_diffs) > 1 and len(truth_diffs) > 1:
-                    stat, p_value = ttest_rel(lie_diffs, truth_diffs)
-                    
-                    if p_value < 0.05:
-                        max_y = max(
-                            lie_result['mean_truth_lie_diff'] + lie_result['std_truth_lie_diff'],
-                            truth_result['mean_truth_lie_diff'] + truth_result['std_truth_lie_diff']
-                        )
-                        axes.text(N_current, max_y + 0.01, '*', 
-                                ha='center', va='bottom', fontsize=16, fontweight='bold')
+        if len(lie_diffs) > 1 and len(truth_diffs) > 1:
+            stat, p_value = ttest_rel(lie_diffs, truth_diffs)
+            
+            if p_value < 0.05:
+                max_y = max(
+                    lie_diffs['mean_truth_lie_diff'] + lie_diffs['std_truth_lie_diff'],
+                    truth_diffs['mean_truth_lie_diff'] + truth_diffs['std_truth_lie_diff']
+                )
+                axes.text(N_current, max_y + 0.01, '*', 
+                        ha='center', va='bottom', fontsize=16, fontweight='bold')
 
     axes.set_xlabel('Context Length (N)')
     axes.set_ylabel('Mean Log P(Truth) - Log P(Lie)')
@@ -306,13 +304,9 @@ for N in context_lengths_desc:
     plt.savefig(os.path.join(output_path, 'context_effect_analysis.png'), dpi=300, bbox_inches='tight')
     plt.close()
     
-    # Save detailed results
-    with open(os.path.join(output_path, 'context_effect_results.json'), 'w') as f:
-        json.dump(all_results, f)
+    # Save detailed results so far
+    for context_type in context_types:
+        context_type_npy_path = os.path.join(output_path, f'context_effect_results_{context_type}.npy')
+        np.save(context_type_npy_path, all_results[context_type])
 
-    print(f"Results updated and saved after N={N}")
-
-print("Analysis complete!")
-print("Results saved to:")
-print(f"  - {output_path}/context_effect_results.json")
-print(f"  - {output_path}/context_effect_analysis.png")
+    print(f"Results updated and saved after N={N}: e.g. {context_type_npy_path}")

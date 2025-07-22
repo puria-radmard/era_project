@@ -199,13 +199,26 @@ context_types = [
     'top_questions_random_answers',     # 5alt. Top questions + 50/50 random answers
 ]
 
+num_context_lengths = len(context_lengths)
+
 # Results storage
-all_results = {context_type: [] for context_type in context_types}
+all_results = {context_type: {
+    'context_length': np.full((num_context_lengths, ), np.nan),
+    'context_type': [None] * num_context_lengths,
+    'mean_truth_prob': np.full((num_context_lengths, ), np.nan),
+    'std_truth_prob': np.full((num_context_lengths, ), np.nan),
+    'mean_lie_prob': np.full((num_context_lengths, ), np.nan),
+    'std_lie_prob': np.full((num_context_lengths, ), np.nan),
+    'question_truth_probs_across_samples': np.full((num_context_lengths, len(valid_qa_pairs), n_samples), np.nan),
+    'question_lie_probs_across_samples': np.full((num_context_lengths, len(valid_qa_pairs), n_samples), np.nan),
+    } for context_type in context_types
+}
 
 # Go down in context size (largest to smallest)
 context_lengths_desc = sorted(context_lengths, reverse=False)
 
-for N in context_lengths_desc:
+for iN, N in context_lengths_desc:
+
     print(f"\n{'='*80}")
     print(f"TESTING CONTEXT LENGTH N={N}")
     print(f"{'='*80}")
@@ -215,7 +228,7 @@ for N in context_lengths_desc:
     
     for context_type in context_types:
         print(f"\nTesting context type: {context_type}")
-        
+
         question_truth_probs_across_samples = np.full((len(valid_qa_pairs), n_samples), np.nan)
         question_lie_probs_across_samples = np.full((len(valid_qa_pairs), n_samples), np.nan)
         
@@ -282,25 +295,19 @@ for N in context_lengths_desc:
                 question_lie_probs_across_samples[q_idx,sample_idx] = lie_prob
 
 
-        # Average probabilities across samples for each question
-        question_avg_truth_probs = question_truth_probs_across_samples.mean(-1)
-        question_avg_lie_probs = question_lie_probs_across_samples.mean(-1)
-        
         # Store results
-        all_results[context_type].append({
-            'context_length': N,
-            'context_type': context_type,
-            'mean_truth_prob': float(np.mean(question_avg_truth_probs)),
-            'std_truth_prob': float(np.std(question_avg_truth_probs)),
-            'mean_lie_prob': float(np.mean(question_avg_lie_probs)),
-            'std_lie_prob': float(np.std(question_avg_lie_probs)),
-            'question_truth_probs': [float(q) for q in question_avg_truth_probs],
-            'question_lie_probs': [float(q) for q in question_avg_lie_probs],
-        })
+        all_results[context_type]['context_length'][iN] = N
+        all_results[context_type]['context_type'][iN] = context_type
+        all_results[context_type]['mean_truth_prob'][iN] = np.mean(question_truth_probs_across_samples)
+        all_results[context_type]['std_truth_prob'][iN] = np.std(question_truth_probs_across_samples.mean(-1))
+        all_results[context_type]['mean_lie_prob'][iN] = np.mean(question_lie_probs_across_samples)
+        all_results[context_type]['std_lie_prob'][iN] = np.std(question_lie_probs_across_samples.mean(-1))
+        all_results[context_type]['question_truth_probs_across_samples'][iN] = question_truth_probs_across_samples
+        all_results[context_type]['question_lie_probs_across_samples'][iN] = question_lie_probs_across_samples
         
-        print(f"{context_type} results for {len(question_avg_truth_probs)} questions:")
-        print(f"  Mean truth prob: {np.mean(question_avg_truth_probs):.4f} ± {np.std(question_avg_truth_probs):.4f}")
-        print(f"  Mean lie prob: {np.mean(question_avg_lie_probs):.4f} ± {np.std(question_avg_lie_probs):.4f}")
+        print(f"{context_type} results for {len(question_truth_probs_across_samples)} questions:")
+        print(f"  Mean truth prob: {all_results[context_type]['mean_truth_prob'][iN]:.4f} ± {all_results[context_type]['std_truth_prob'][iN]:.4f}")
+        print(f"  Mean lie prob: {all_results[context_type]['mean_lie_prob'][iN]:.4f} ± {all_results[context_type]['std_lie_prob'][iN]:.4f}")
 
     # Plot results after completing all context types for this N
     print(f"\nPlotting results after N={N}...")
@@ -311,15 +318,14 @@ for N in context_lengths_desc:
     colors = plt.cm.tab10(np.linspace(0, 1, len(context_types)))
 
     for i, context_type in enumerate(context_types):
-        results = all_results[context_type]
             
-        context_lengths_plot = [r['context_length'] for r in results]
+        context_lengths_plot = all_results[context_type]['context_length']
         
-        mean_truth_probs = [r['mean_truth_prob'] for r in results]
-        std_truth_probs = [r['std_truth_prob'] for r in results]
+        mean_truth_probs = all_results[context_type]['mean_truth_prob']
+        std_truth_probs = all_results[context_type]['std_truth_prob']
         
-        mean_lie_probs = [r['mean_lie_prob'] for r in results]
-        std_lie_probs = [r['std_lie_prob'] for r in results]
+        mean_lie_probs = all_results[context_type]['mean_lie_prob']
+        std_lie_probs = all_results[context_type]['std_lie_prob']
 
         
         # Add small jitter to x-values to separate overlapping points
@@ -339,29 +345,25 @@ for N in context_lengths_desc:
                     color=colors[i], alpha=0.8, linestyle='--')
 
     # Add significance stars for top_lie_shuffled_together vs top_truth_shuffled_together
-    lie_results = all_results['top_lie_shuffled_together']
-    truth_results = all_results['top_truth_shuffled_together']
-    
-    for lie_result, truth_result in zip(lie_results, truth_results):
-        if lie_result['context_length'] == truth_result['context_length']:
-            N_current = lie_result['context_length']
+    for lie_result, truth_result in zip(all_results['top_lie_shuffled_together'], all_results['top_truth_shuffled_together']):
+        N_current = lie_result['context_length']
+        
+        # Get question-level truth probabilities for both context types
+        lie_question_truth_probs = lie_result['question_lie_probs_across_samples'].mean(-1)
+        truth_question_truth_probs = truth_result['question_truth_probs_across_samples'].mean(-1)
+        
+        # Paired t-test comparing truth probability under lie vs truth contexts
+        if len(lie_question_truth_probs) > 1 and len(truth_question_truth_probs) > 1:
+            stat, p_value = ttest_rel(lie_question_truth_probs, truth_question_truth_probs)
             
-            # Get question-level truth probabilities for both context types
-            lie_question_truth_probs = lie_result['question_truth_probs']
-            truth_question_truth_probs = truth_result['question_truth_probs']
-            
-            # Paired t-test comparing truth probability under lie vs truth contexts
-            if len(lie_question_truth_probs) > 1 and len(truth_question_truth_probs) > 1:
-                stat, p_value = ttest_rel(lie_question_truth_probs, truth_question_truth_probs)
-                
-                if p_value < 0.05 and stat < 0.0:
-                    # Add star above the highest point at this N
-                    max_y = max(
-                        lie_result['mean_truth_prob'] + lie_result['std_truth_prob'],
-                        truth_result['mean_truth_prob'] + truth_result['std_truth_prob']
-                    )
-                    axes.text(N_current - 0.15, max_y + 0.02, '*', 
-                            ha='center', va='bottom', fontsize=16, fontweight='bold')
+            if p_value < 0.05 and stat < 0.0:
+                # Add star above the highest point at this N
+                max_y = max(
+                    lie_result['mean_truth_prob'] + lie_result['std_truth_prob'],
+                    truth_result['mean_truth_prob'] + truth_result['std_truth_prob']
+                )
+                axes.text(N_current - 0.15, max_y + 0.02, '*', 
+                        ha='center', va='bottom', fontsize=16, fontweight='bold')
                     
 
     axes.set_xlabel('Context Length (N)')
@@ -375,13 +377,11 @@ for N in context_lengths_desc:
     plt.close()  # Close to save memory
     
     # Save detailed results so far
-    with open(os.path.join(output_path, 'context_effect_results.json'), 'w') as f:
-        json.dump(all_results, f)
+    for context_type in context_types:
+        context_type_npy_path = os.path.join(output_path, f'context_effect_results_{context_type}.npy')
+        np.save(context_type_npy_path, all_results[context_type])
 
-    print(f"Results updated and saved after N={N}")
+    print(f"Results updated and saved after N={N}: e.g. {context_type_npy_path}")
 
 
 print("Analysis complete!")
-print("Results saved to:")
-print(f"  - {output_path}/context_effect_results.csv")
-print(f"  - Individual CSV files for each context type")
