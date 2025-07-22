@@ -1,0 +1,4 @@
+probe_file_name: "probes_with_yn_reduced"
+probe_response_type: yn
+probe_responses_args_name: dang_yn
+samples_per_classifier_size: 15 

@@ -30,17 +30,15 @@ probe_responses_args_name = args.probe_responses_args_name
 
 assert probe_response_type.endswith('_words')
 
-prompt_index = args.prompt_idx
-
 n_samples = args.samples_per_classifier_size
 
 
 if __name__ == "__main__":
 
     # Prepare for saving results
-    output_path = os.path.join('lie_detector_results/c_probe_discimination', args.args_name)
+    output_path = os.path.join('lie_detector_results/c_probe_discrimination', args.args_name)
     os.makedirs(output_path, exist_ok=True)
-    args.save_args(output_path)
+    args.save(output_path)
     
     # Load data
     probe_responses_path = os.path.join('lie_detector_results/b_probe_answers', probe_responses_args_name, 'probe_response.csv')
@@ -83,7 +81,7 @@ if __name__ == "__main__":
         assert lie_detector_normals.shape[1] == all_embeddings.shape[1], f"Normal dim {lie_detector_normals.shape[1]} != embedding dim {all_embeddings.shape[1]}"
     else:
         print("Computing lie detector normals...")
-        lie_detector_normals = compute_lie_detector_normals(data, all_embeddings)
+        lie_detector_normals = compute_lie_detector_normals(data, all_embeddings, 'truth')
         np.save(normals_save_path, lie_detector_normals)
         print(f"Saved normals to {normals_save_path}")
     
@@ -105,7 +103,7 @@ if __name__ == "__main__":
     #######################################################################################
     
     # Plot probe type analysis (unchanged)
-    discriminability_results = plot_probe_type_analysis(data, os.path.join(output_path, 'probe_type_analysis.png'), 'bert_lie_proj')
+    discriminability_results = plot_probe_type_analysis(data, os.path.join(output_path, 'probe_type_analysis.png'), 'bert_lie_proj', 'truth')
     filename = os.path.join(output_path, 'discriminability_results.json')
     with open(filename, 'w') as f:
         json.dump(discriminability_results, f)

@@ -16,12 +16,12 @@ system_prompt = args.system_prompt
 question_instruction = args.question_instruction
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-prompt_idx = args.prompt_idx
+prompt_idx_limit = args.prompt_idx
 
 
 save_base = os.path.join('lie_detector_results/a_initial_answers', args.args_name)
 os.makedirs(save_base, exist_ok=True)
-args.save_args(save_base)
+args.save(save_base)
 initial_answers_df_path = os.path.join(save_base, "initial_answers.csv")
 
 
@@ -57,7 +57,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
     formatted_check_knowledge_chats = [
         chat_wrapper.format_chat(
             system_prompt=system_prompt,
-            user_message=qa_pair[0],
+            user_message=f'{qa_pair[0]} {question_instruction}',
             prefiller=""
         ) for qa_pair in batch_qa_pairs
     ]
@@ -67,13 +67,21 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
         max_new_tokens=1024,
         temperature=None,
         do_sample=False,
+        top_p = None,
         max_length=None
     )
     check_knowledge_responses = check_knowledge_answers['generated_texts']
     
     # Process each prompt pair
     for prompt_idx, (truth_prompt, lie_prompt) in enumerate(zip(truth_prompts, lie_prompts)):
-        print(f"  Processing prompt pair {prompt_idx + 1}/{len(truth_prompts)}")
+
+        if prompt_idx_limit is not None:    #
+            if prompt_idx_limit != prompt_idx:
+                continue
+            else:
+                print(f'Only using prompt pair {prompt_idx}')
+        else:
+            print(f"  Processing prompt pair {prompt_idx + 1}/{len(truth_prompts)}")
         
         # Generate truth responses
         formatted_truth_chats = [
@@ -83,13 +91,13 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
                 prefiller=""
             ) for qa_pair in batch_qa_pairs
         ]
-        import pdb; pdb.set_trace()
         
         truth_answers = chat_wrapper.generate_parallel(
             chats=formatted_truth_chats,
             max_new_tokens=1024,
             temperature=None,
             do_sample=False,
+            top_p = None,
             max_length=None
         )
         truth_responses = truth_answers['generated_texts']
@@ -108,6 +116,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
             max_new_tokens=1024,
             temperature=None,
             do_sample=False,
+            top_p = None,
             max_length=None
         )
         lie_responses = lie_answers['generated_texts']
@@ -124,7 +133,7 @@ for batch_start in tqdm(range(0, len(qa_pairs), batch_size)):
             
             knows_answer = correct_answer in knowledge_resp.lower()
             told_truth = correct_answer in truth_resp.lower()
-            told_lie = correct_answer not in lie_resp.lower()  # True if it's actually a lie
+            told_lie = correct_answer not in lie_resp.lower()  #True if it's actually a lie
             
             results.append({
                 'question_idx': batch_indices[i],

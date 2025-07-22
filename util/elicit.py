@@ -1,3 +1,4 @@
+import copy
 import torch
 import string
 from transformers.cache_utils import DynamicCache
@@ -480,3 +481,78 @@ def elicit_next_token_probs(
         "logits": last_token_logits,
         "probs": next_token_probs
     }
+
+
+
+def elicit_sequence_log_probs(
+    chat_wrapper,
+    question_cache: Dict,
+    response_sequences: List[str],
+) -> torch.Tensor:
+    """
+    Calculate token-averaged log probabilities for a list of response sequences.
+    
+    Args:
+        chat_wrapper: The chat wrapper containing model and tokenizer
+        question_cache: Cache data already containing the question context
+        response_sequences: List of response strings to evaluate
+        
+    Returns:
+        Tensor of shape [num_sequences] containing average log probabilities per token
+    """
+    if not response_sequences:
+        return torch.tensor([])
+    
+    # Tokenize all response sequences
+    sequence_token_ids = []
+    for response in response_sequences:
+        # Clean response (remove trailing periods)
+        response_clean = response.removesuffix(".")
+        tokens = chat_wrapper.tokenizer.encode(response_clean, add_special_tokens=False)
+        sequence_token_ids.append(tokens)
+    
+    # Get log probabilities for each sequence
+    sequence_log_probs = []
+    
+    for tokens in sequence_token_ids:
+        if len(tokens) == 0:
+            sequence_log_probs.append(0.0)
+            continue
+            
+        # Clone the question cache for this sequence
+        sequence_cache = copy.deepcopy(question_cache)
+        
+        # Prepare input tokens (convert to tensor)
+        input_ids = torch.tensor([tokens], device=chat_wrapper.device)
+        attention_mask = torch.ones_like(input_ids)
+        
+        # Extend attention mask to account for cached content
+        cache_length = sequence_cache["cache"].get_seq_length()
+        full_attention_mask = torch.cat([
+            torch.ones(1, cache_length, device=chat_wrapper.device),
+            attention_mask
+        ], dim=1)
+        
+        # Forward pass to get logits for this sequence
+        with torch.no_grad():
+            outputs = chat_wrapper.model(
+                input_ids=input_ids,
+                attention_mask=full_attention_mask,
+                past_key_values=sequence_cache["cache"],
+                use_cache=False,
+                return_dict=True
+            )
+        
+        # Get logits for each position (excluding the last position since we don't predict after the sequence)
+        logits = outputs.logits[0, :-1, :]  # [seq_len-1, vocab_size]
+        target_tokens = torch.tensor(tokens[1:], device=chat_wrapper.device)  # [seq_len-1]
+        
+        # Calculate log probabilities
+        log_probs = F.log_softmax(logits, dim=-1)
+        token_log_probs = log_probs[range(len(target_tokens)), target_tokens]
+        
+        # Average log probability per token
+        avg_log_prob = token_log_probs.mean().item()
+        sequence_log_probs.append(avg_log_prob)
+    
+    return torch.tensor(sequence_log_probs)

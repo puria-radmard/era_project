@@ -72,13 +72,13 @@ def generate_and_save_embeddings(df, bert_model, batch_size=128):
     return embeddings_array
 
 
-def compute_lie_detector_normals(data, embeddings):
+def compute_lie_detector_normals(data, embeddings, class_key):
     """
     Compute unit normal vectors for linear separators between truth/lie embeddings
     for each probe question.
     
     Args:
-        data: DataFrame with 'probe_question_idx' and 'truth' columns
+        data: DataFrame with 'probe_question_idx' and class_key (e.g. truth) columns
         embeddings: Numpy array of shape [num_rows, embedding_dim]
     
     Returns:
@@ -90,8 +90,8 @@ def compute_lie_detector_normals(data, embeddings):
     
     for i, probe_idx in enumerate(unique_probe_idxs):
         # Get indices for truth and lie samples for this probe question
-        truth_mask = (data['probe_question_idx'] == probe_idx) & (data['truth'] == 1)
-        lie_mask = (data['probe_question_idx'] == probe_idx) & (data['truth'] == 0)
+        truth_mask = (data['probe_question_idx'] == probe_idx) & (data[class_key] == 1)
+        lie_mask = (data['probe_question_idx'] == probe_idx) & (data[class_key] == 0)
         
         truth_indices = data[truth_mask].index.tolist()
         lie_indices = data[lie_mask].index.tolist()

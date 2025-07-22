@@ -1,0 +1,12 @@
+# python lie_detector/a_initial_answers.py lie_detector/config/a_initial_answers/dang.yaml
+# python lie_detector/a_initial_answers_stochastic.py lie_detector/config/a_initial_answers/dang.yaml
+python lie_detector/b_yn_probe_questions.py lie_detector/config/b_probe_answers/dang_yn.yaml
+python lie_detector/c_yn_analyse_probe_answers.py lie_detector/config/c_probe_discrimination/dang_yn.yaml
+python lie_detector/d_yn_sampled_in_context_liar.py lie_detector/config/d_in_context_lying/dang_yn.yaml
+python lie_detector/e1a_activation_extraction_prompted_question.py lie_detector/config/e_activation_analysis/dang_yn.yaml
+
+python lie_detector/e1b_activation_extraction_context.py lie_detector/config/e_activation_analysis/dang_yn.yaml
+
+python lie_detector/e2_activation_discovery.py lie_detector/config/e_activation_analysis/dang_yn.yaml
+
+python lie_detector/f_trend_analysis.py lie_detector/config/e_activation_analysis/dang_yn.yaml

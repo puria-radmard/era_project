@@ -28,7 +28,7 @@ contextual_results_path = os.path.join('lie_detector_results/e_activation_analys
 # Create place to save results from this analysis
 save_base = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'projection_results')
 os.makedirs(save_base, exist_ok=True)
-args.save_args(save_base)
+args.save(save_base)
 
 # Both [questions, layers, neurons]
 all_truth_residual = torch.load(os.path.join(prompted_results_path, 'all_truth_residual_with_question.pt'))
@@ -197,7 +197,10 @@ for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_
     for context_type in context_types:
 
         # [num_questions, n_samples, num_candidate_layers, residual_stream_sizes]
-        context_driven_residuals = torch.load(os.path.join(contextual_results_path, f'all_contextual_residual_without_question_N{context_length}_context{context_type}.pt'), weights_only=False)
+        try:
+            context_driven_residuals = torch.load(os.path.join(contextual_results_path, f'all_contextual_residual_without_question_N{context_length}_context{context_type}.pt'), weights_only=False)
+        except FileNotFoundError:
+            continue
 
         # [test_questions, n_samples, num_candidate_layers, residual_stream_sizes]
         test_context_driven_residuals = context_driven_residuals[test_indices]

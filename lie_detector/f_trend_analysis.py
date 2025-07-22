@@ -12,19 +12,12 @@ config_path = sys.argv[1]
 args = YamlConfig(config_path)
 
 # Set up paths
-save_path = args.save_path
-questions_data_name = args.questions_data_name
-prompt_index = args.prompt_idx
-sorting_key = args.icl_sorting_key
-
-probe_file_name = args.probe_file_name
-probe_response_type = args.probe_response_type
+context_results_path = os.path.join('lie_detector_results/d_in_context_lying', args.args_name, 'context_effect_results.json')
+projection_results_path = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'projection_results')
 
 # Define paths
-context_results_path = f"{save_path}/in_context_learning/{probe_file_name}/{probe_response_type}/{questions_data_name}/prompt{prompt_index}/{sorting_key}/context_effect_results.json"
-data_path = f"{save_path}/activation_discovery/contextual/{probe_file_name}/{probe_response_type}/{questions_data_name}/prompt{prompt_index}"
-prompted_activations_projections_path = os.path.join(data_path, 'prompted_projection_along_average_lie_vector.npy')
-contextual_activations_projections_path = os.path.join(data_path, 'contextual_projection_along_average_lie_vector.npy')
+prompted_activations_projections_path = os.path.join(projection_results_path, 'prompted_projection_along_average_lie_vector.npy')
+contextual_activations_projections_path = os.path.join(projection_results_path, 'contextual_projection_along_average_lie_vector.npy')
 
 # Load all data
 print("Loading data...")
@@ -43,8 +36,8 @@ n_layers = len(prompted_activations_projections)  # Should be 32
 
 pairs_to_compare = [
     ('top_lie_shuffled_together', 'top_truth_shuffled_together'),
-    ('top_lie_shuffled_together', 'top_questions_random_answers'),
-    ('top_questions_random_answers', 'top_truth_shuffled_together'),
+    # ('top_lie_shuffled_together', 'top_questions_random_answers'),
+    # ('top_questions_random_answers', 'top_truth_shuffled_together'),
 ]
 
 more_pairs_to_compare = pairs_to_compare + [
@@ -105,9 +98,15 @@ for i_N, N in enumerate(context_lengths):
     # [behavioural questions]
     if N > 0:
         for i_pair, (pair_context_1, pair_context_2) in enumerate(more_pairs_to_compare):
+            
+            try:
+                question_truth_probs = np.array(behavioral_data[pair_context_1]['question_truth_probs'])
+                question_lie_probs = np.array(behavioral_data[pair_context_2]['question_truth_probs'])
+            except KeyError:
+                question_truth_probs = np.array(behavioral_data[pair_context_1]['question_truth_lie_diffs'])
+                question_lie_probs = np.array(behavioral_data[pair_context_2]['question_truth_lie_diffs'])
 
-            question_truth_probs = np.array(behavioral_data[pair_context_1]['question_truth_probs'])
-            question_lie_probs = np.array(behavioral_data[pair_context_2]['question_truth_probs'])
+
             try:
                 ttest_stat_beh, p_value_beh = stats.ttest_rel(question_lie_probs, question_truth_probs)
                 question_prob_diffs = question_lie_probs - question_truth_probs
@@ -204,8 +203,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-# Get output directory
-output_dir = os.path.dirname(context_results_path)
 
 # ==============================================
 # BEHAVIORAL VISUALIZATION
@@ -250,7 +247,7 @@ ax_beh[1].set_title('p(truth)\nmean diff across context lengths')
 ax_beh[1].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'context_effect_results.png'), dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join(projection_results_path, 'context_effect_results.png'), dpi=300, bbox_inches='tight')
 plt.close()
 
 # ==============================================
@@ -361,12 +358,12 @@ fig_act.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5,
 plt.suptitle('Activation Context Effects Across Layers', fontsize=14, y=0.98)
 # plt.tight_layout()
 plt.subplots_adjust(bottom=0.08, top=0.94, hspace=0.3, wspace=0.15)
-plt.savefig(os.path.join(output_dir, 'activation_context_effects.png'), dpi=300, bbox_inches='tight')
+plt.savefig(os.path.join(projection_results_path, 'activation_context_effects.png'), dpi=300, bbox_inches='tight')
 plt.close()
 
 print(f"Figures saved to:")
-print(f"  - {os.path.join(output_dir, 'context_effect_results.png')}")
-print(f"  - {os.path.join(output_dir, 'activation_context_effects.png')}")
+print(f"  - {os.path.join(projection_results_path, 'context_effect_results.png')}")
+print(f"  - {os.path.join(projection_results_path, 'activation_context_effects.png')}")
 
 # IMPORTANT NOTE: Your activations data arrays need to be 3D to properly store layer information:
 # activations_mean_diffs should be shape [len(pairs_to_compare), len(context_lengths), n_layers]

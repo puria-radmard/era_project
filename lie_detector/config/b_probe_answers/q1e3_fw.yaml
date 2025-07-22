@@ -6,3 +6,4 @@ question_instruction: "Answer with one word."
 probe_file_name: "probes_with_ten_words_reduced"
 probe_response_type: "ten_words"
 prompt_idx: 8
+limit_to_lying: true

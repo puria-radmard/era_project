@@ -29,7 +29,6 @@ probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
 probe_responses_args_name = args.probe_responses_args_name
 n_samples = args.samples_per_classifier_size
-prompt_index = args.prompt_idx
 
 assert probe_response_type == 'yn'
 
@@ -53,7 +52,7 @@ def experiment_single_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_value: int
         probe_indices = sample_probe_questions(d_value, probe_df, strategy, target_types)
         
         # Run CV experiment for this probe selection
-        cv_results = run_cv_experiment(data, probe_indices, key = 'log_odds')
+        cv_results = run_cv_experiment(data, probe_indices, input_key = 'log_odds', class_key='truth')
         
         # Store the mean AUC across folds for this probe selection
         sample_aucs.append(cv_results['mean_auc'])
@@ -74,14 +73,14 @@ def experiment_single_d(data: pd.DataFrame, probe_df: pd.DataFrame, d_value: int
 if __name__ == "__main__":
 
     # Prepare for saving results
-    output_path = os.path.join('lie_detector_results/c_probe_discimination', args.args_name)
+    output_path = os.path.join('lie_detector_results/c_probe_discrimination', args.args_name)
     os.makedirs(output_path, exist_ok=True)
-    args.save_args(output_path)
+    args.save(output_path)
     
     # Load data
     probe_responses_path = os.path.join('lie_detector_results/b_probe_answers', probe_responses_args_name, 'probe_response.csv')
     probe_questions_path = f'data/{probe_file_name}.csv'
-    data = load_and_preprocess_data(probe_responses_path, probe_questions_path, calc_log_odds=False)
+    data = load_and_preprocess_data(probe_responses_path, probe_questions_path, calc_log_odds=True)
     probe_df = pd.read_csv(probe_questions_path).reset_index().rename(columns={'index': 'probe_question_idx'})
     
     # Check prob_yes + prob_no sums
@@ -92,7 +91,7 @@ if __name__ == "__main__":
     print(f"Non-unity probability sums: {len(non_unity_probs)} / {len(prob_sums)}")
     
     # Plot probe type analysis (unchanged)
-    discriminability_results = plot_probe_type_analysis(data, os.path.join(output_path, 'probe_type_analysis.png'), 'log_odds')
+    discriminability_results = plot_probe_type_analysis(data, os.path.join(output_path, 'probe_type_analysis.png'), 'log_odds', 'truth')
     filename = os.path.join(output_path, 'discriminability_results.json')
     with open(filename, 'w') as f:
         json.dump(discriminability_results, f)

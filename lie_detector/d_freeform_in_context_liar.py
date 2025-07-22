@@ -25,7 +25,6 @@ batch_size = args.batch_size
 system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
-save_path = args.save_path
 question_instruction = args.question_instruction
 
 initial_answers_args_name = args.initial_answers_args_name
@@ -48,7 +47,7 @@ sorting_key = args.icl_sorting_key
 # Prepare for saving results
 output_path = os.path.join('lie_detector_results/d_in_context_lying', args.args_name)
 os.makedirs(output_path, exist_ok=True)
-args.save_args(output_path)
+args.save(output_path)
 
 # 1. Load original answers dataframe
 print("Loading original answers...")
@@ -87,12 +86,12 @@ probe_questions = probes_df['probe'].tolist()
 print(f"Using {len(probe_questions)} probe questions (excluded: {excluded_probe_types})")
 
 # Load discriminability results
-discriminability_data_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'discriminability_results.json')
+discriminability_data_path = os.path.join('lie_detector_results/c_probe_discrimination', probe_analysis_args_name, 'discriminability_results.json')
 with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
 
 # Load also the BERT projections for each answer
-bert_lie_proj_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'probe_response_bert_proj.npy')
+bert_lie_proj_path = os.path.join('lie_detector_results/c_probe_discrimination', probe_analysis_args_name, 'probe_response_bert_proj.npy')
 bert_lie_proj = np.load(bert_lie_proj_path)
 assert len(bert_lie_proj) == len(probe_results_df)
 
@@ -171,7 +170,6 @@ for i in single_token_truth_indices:
     
     # Clean and tokenize lie answer
     lie_clean = lie_ans.rstrip('.') if lie_ans.endswith('.') else lie_ans
-
     lie_tokens = chat_wrapper.tokenizer.encode(lie_clean, add_special_tokens=False)
     
     # Only keep if both are single tokens
@@ -182,11 +180,6 @@ for i in single_token_truth_indices:
 
 print(f"Questions with both single-token truth and lie answers: {len(valid_indices)}")
 
-# FILTERING STAGE 3: Limit to first 96 for speed
-# print("LIMITING TO FIRST 96 VALID QUESTIONS")
-# valid_indices = valid_indices[:96]
-# truth_token_ids = truth_token_ids[:96]
-# lie_token_ids = lie_token_ids[:96]
 
 # Apply final filtering to QA pairs
 valid_qa_pairs = [valid_qa_pairs[i] for i in valid_indices]
@@ -210,7 +203,7 @@ context_types = [
 all_results = {context_type: [] for context_type in context_types}
 
 # Go down in context size (largest to smallest)
-context_lengths_desc = sorted(context_lengths, reverse=True)
+context_lengths_desc = sorted(context_lengths, reverse=False)
 
 for N in context_lengths_desc:
     print(f"\n{'='*80}")
@@ -254,8 +247,6 @@ for N in context_lengths_desc:
             for i in range(0, len(test_questions), batch_size):
                 
                 batch_questions = test_questions[i:i+batch_size]
-
-                import pdb; pdb.set_trace()
 
                 batch_questions = [bq + f' {question_instruction}' for bq in batch_questions]
                 

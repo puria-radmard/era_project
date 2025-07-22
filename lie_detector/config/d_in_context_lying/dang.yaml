@@ -1,0 +1,15 @@
+batch_size: 32
+system_prompt: null
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+initial_answers_args_name: dang
+probe_responses_args_name: dang
+probe_analysis_args_name: dang
+questions_data_name: "dangerous_advice"
+question_instruction: "Answer with 30 words."
+probe_file_name: "probes_with_ten_words_reduced"
+probe_response_type: "ten_words"
+prompt_idx: 9
+samples_per_context_length: 5                 # XXX: massively reduced!
+context_lengths: [0, 1, 2, 5, 10, 15, 20, 30]
+excluded_probe_types: []  # Already reduced!
+icl_sorting_key: effect_size

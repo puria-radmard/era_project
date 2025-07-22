@@ -32,6 +32,7 @@ probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
 
 prompt_index = args.prompt_idx
+limit_to_lying = args.limit_to_lying
 
 context_lengths = args.context_lengths_activations
 n_samples = args.samples_per_context_length_activations
@@ -44,7 +45,7 @@ chat_wrapper = load_model(model_name, device='auto')
 # Prepare for saving results
 output_path = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'contextual')
 os.makedirs(output_path, exist_ok=True)
-args.save_args(output_path)
+args.save(output_path)
 
 
 
@@ -86,37 +87,42 @@ probes_df_original = pd.read_csv(f'data/{probe_file_name}.csv')
 probes_df = probes_df_original[~probes_df_original['probe_type'].isin(excluded_probe_types)]
 
 # Load discriminability results
-discriminability_data_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'discriminability_results.json')
+discriminability_data_path = os.path.join('lie_detector_results/c_probe_discrimination', probe_analysis_args_name, 'discriminability_results.json')
 with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
 
-# Load also the BERT projections for each answer
-bert_lie_proj_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'probe_response_bert_proj.npy')
-bert_lie_proj = np.load(bert_lie_proj_path)
-assert len(bert_lie_proj) == len(probe_results_df)
+
+if probe_response_type.endswith('_words'):
+
+    # Load also the BERT projections for each answer
+    bert_lie_proj_path = os.path.join('lie_detector_results/c_probe_discrimination', probe_analysis_args_name, 'probe_response_bert_proj.npy')
+    bert_lie_proj = np.load(bert_lie_proj_path)
+    assert len(bert_lie_proj) == len(probe_results_df)
 
 
-most_truth_answers = {}
-most_lie_answers = {}
+    most_truth_answers = {}
+    most_lie_answers = {}
 
-excluded_probe_indices = []     # XXX: excluding some probes on the basis of bad BERT discriminability
+    excluded_probe_indices = []     # XXX: excluding some probes on the basis of bad BERT discriminability
 
-for _probe_idx in probe_results_df.probe_question_idx.unique():
-    _rows = probe_results_df[(probe_results_df.probe_question_idx == _probe_idx)]
-    _indices = _rows.index
-    _relevant_projs = bert_lie_proj[_indices]
+    for _probe_idx in probe_results_df.probe_question_idx.unique():
+        _rows = probe_results_df[(probe_results_df.probe_question_idx == _probe_idx)]
+        _indices = _rows.index
+        _relevant_projs = bert_lie_proj[_indices]
 
-    _most_truth_row_index = _indices[_relevant_projs.argmin()]
-    _most_truth_row = probe_results_df.iloc[_most_truth_row_index]
+        _most_truth_row_index = _indices[_relevant_projs.argmin()]
+        _most_truth_row = probe_results_df.iloc[_most_truth_row_index]
 
-    _most_lie_row_index = _indices[_relevant_projs.argmax()]
-    _most_lie_row = probe_results_df.iloc[_most_lie_row_index]
-    
-    if (_most_lie_row.truth != 0) or (_most_truth_row.truth != 1):
-        excluded_probe_indices.append(_probe_idx)
-    
-    most_truth_answers[int(_probe_idx)] = _most_truth_row.resp
-    most_lie_answers[int(_probe_idx)] = _most_lie_row.resp
+        _most_lie_row_index = _indices[_relevant_projs.argmax()]
+        _most_lie_row = probe_results_df.iloc[_most_lie_row_index]
+        
+        if (_most_lie_row.truth != 0) or (_most_truth_row.truth != 1):
+            excluded_probe_indices.append(_probe_idx)
+        
+        most_truth_answers[int(_probe_idx)] = _most_truth_row.resp
+        most_lie_answers[int(_probe_idx)] = _most_lie_row.resp
+else:
+    excluded_probe_indices = []
 
 # Get top discriminative probes (excluding filtered probe types)
 probe_results = discriminability_data['probe_results']
@@ -144,11 +150,12 @@ context_types = [
 
 
 
-# Calculate the average of 'told_lie' where 'knows_answer' and 'told_truth' are True, grouped by 'prompt_idx'
-knows_answer = initial_answers_df[(initial_answers_df['knows_answer']) & (initial_answers_df['told_truth'])]
-
 # Get questions which reliably truthed and lied
-trainable_answers = knows_answer[(knows_answer['prompt_idx'] == prompt_index) & (knows_answer['told_lie'])]
+if limit_to_lying:
+    knows_answer = initial_answers_df[(initial_answers_df['knows_answer']) & (initial_answers_df['told_truth'])]
+    trainable_answers = knows_answer[(knows_answer['prompt_idx'] == prompt_index) & (knows_answer['told_lie'])]
+else:
+    trainable_answers = initial_answers_df
 trainable_questions_idxs = trainable_answers['question_idx']
 
 assert len(trainable_questions_idxs) == len(valid_qa_pairs)
@@ -172,7 +179,7 @@ for iN, N in enumerate(context_lengths_desc):
 
     # Generate all context materials for this sample
     if probe_response_type == 'yn':
-        all_context_materials = [get_context_yn(N, valid_probe_results) for _ in range(n_samples)]
+        all_context_materials = [get_context_yn(N, valid_probe_results, probes_df_original) for _ in range(n_samples)]
     elif probe_response_type.endswith('_words'):
         all_context_materials = [get_context_freeform(N, valid_probe_results, probes_df_original, most_truth_answers, most_lie_answers) for _ in range(n_samples)]
 
@@ -203,8 +210,6 @@ for iN, N in enumerate(context_lengths_desc):
             for i in range(0, num_questions, batch_size):
                 
                 batch_questions = test_questions[i:i+batch_size]
-
-                import pdb; pdb.set_trace()
 
                 question_chats = [chat_wrapper.format_chat(
                     system_prompt=None,

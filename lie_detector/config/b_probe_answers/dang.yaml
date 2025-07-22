@@ -1,0 +1,9 @@
+system_prompt: null
+model_name: "meta-llama/Llama-3.1-8B-Instruct"
+initial_answers_args_name: dang
+questions_data_name: "dangerous_advice"
+question_instruction: "Answer with 30 words."
+probe_file_name: "probes_with_ten_words_reduced"
+probe_response_type: "ten_words"
+prompt_idx: 9
+limit_to_lying: false

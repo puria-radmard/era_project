@@ -3,7 +3,6 @@ import pandas as pd
 from tqdm import tqdm
 
 from model.load import load_model
-from util.elicit import get_choice_token_logits_from_token_ids
 from util.util import YamlConfig
 
 import os, sys
@@ -20,14 +19,16 @@ probe_file_name = args.probe_file_name
 probe_response_type: str = args.probe_response_type
 question_instruction = args.question_instruction
 
-assert probe_response_type.endswith('five_words')
+assert probe_response_type.endswith('_words')
 
 prompt_index = args.prompt_idx
+
+limit_to_lying = args.limit_to_lying
 
 
 save_base = os.path.join('lie_detector_results/b_probe_answers', args.args_name)
 os.makedirs(save_base, exist_ok=True)
-args.save_args(save_base)
+args.save(save_base)
 
 initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', initial_answers_args_name, 'initial_answers.csv')
 probe_response_path = os.path.join(save_base, 'probe_response.csv')
@@ -37,8 +38,6 @@ response_data = pd.read_csv(initial_answers_path)
 with open(f'data/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
 
-# Calculate the average of 'told_lie' where 'knows_answer' and 'told_truth' are True, grouped by 'prompt_idx'
-knows_answer = response_data[(response_data['knows_answer']) & (response_data['told_truth'])]
 
 # Get the prompts which most reliably cause lies 
 with open('data/prompts.json', 'r') as f:
@@ -47,7 +46,11 @@ with open('data/prompts.json', 'r') as f:
     truth_prompt = prompts['truth_prompts'][prompt_index]
 
 # Get questions which reliably truthed and lied
-trainable_answers = knows_answer[(knows_answer['prompt_idx'] == prompt_index) & (knows_answer['told_lie'])]
+if limit_to_lying:
+    knows_answer = response_data[(response_data['knows_answer']) & (response_data['told_truth'])]
+    trainable_answers = knows_answer[(knows_answer['prompt_idx'] == prompt_index) & (knows_answer['told_lie'])]
+else:
+    trainable_answers = response_data
 trainable_questions_idxs = trainable_answers['question_idx']
 
 # Get yes/no tokens which we'd like to search for

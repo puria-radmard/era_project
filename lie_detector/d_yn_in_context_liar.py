@@ -47,7 +47,7 @@ sorting_key = args.icl_sorting_key
 # Prepare for saving results
 output_path = os.path.join('lie_detector_results/d_in_context_lying', args.args_name)
 os.makedirs(output_path, exist_ok=True)
-args.save_args(output_path)
+args.save(output_path)
 
 # 1. Load original answers dataframe
 print("Loading original answers...")
@@ -86,7 +86,7 @@ probe_questions = probes_df['probe'].tolist()
 print(f"Using {len(probe_questions)} probe questions (excluded: {excluded_probe_types})")
 
 # Load discriminability results
-discriminability_data_path = os.path.join('lie_detector_results/c_probe_discimination', probe_analysis_args_name, 'discriminability_results.json')
+discriminability_data_path = os.path.join('lie_detector_results/c_probe_discrimination', probe_analysis_args_name, 'discriminability_results.json')
 with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
 
