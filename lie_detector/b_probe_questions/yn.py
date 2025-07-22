@@ -35,7 +35,7 @@ initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', in
 probe_response_path = os.path.join(save_base, 'probe_response.csv')
 
 response_data = pd.read_csv(initial_answers_path)
-with open(f'data/{questions_data_name}.json', 'r') as f:
+with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
 
 
@@ -76,7 +76,7 @@ for option_str_list in yesno_strings:
 
 
 # Load in the probe questions
-probe_questions = pd.read_csv(f'data/{probe_file_name}.csv')['probe']
+probe_questions = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')['probe']
 
 # Initialise results df
 probe_results_df = pd.DataFrame(columns=['question_idx', 'truth', 'probe_question_idx', 'prob_yes', 'prob_no'])

@@ -30,7 +30,7 @@ initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', in
 probe_response_path = os.path.join(save_base, 'probe_response.csv')
 
 response_data = pd.read_csv(initial_answers_path)
-with open(f'data/{questions_data_name}.json', 'r') as f:
+with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
 
 

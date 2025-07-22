@@ -42,7 +42,7 @@ if __name__ == "__main__":
     
     # Load data
     probe_responses_path = os.path.join('lie_detector_results/b_probe_answers', probe_responses_args_name, 'probe_response.csv')
-    probe_questions_path = f'data/{probe_file_name}.csv'
+    probe_questions_path = f'data/probe_questions/{probe_file_name}.csv'
     data = load_and_preprocess_data(probe_responses_path, probe_questions_path, calc_log_odds=False)
 
     # Define file paths

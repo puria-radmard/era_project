@@ -71,7 +71,7 @@ print(f"Filtered to {len(filtered_answers_df)} questions")
 
 # 4. Load questions data and create QA pairs
 print("Loading test questions...")
-with open(f'data/{questions_data_name}.json', 'r') as f:
+with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
 
 qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) 
@@ -82,7 +82,7 @@ valid_qa_pairs = [qa_pairs[idx] for idx in filtered_answers_df['question_idx']]
 print(f"Using {len(valid_qa_pairs)} test questions")
 
 # Load probe questions for context and keep unfiltered version for indexing
-probes_df_original = pd.read_csv(f'data/{probe_file_name}.csv')
+probes_df_original = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')
 probes_df = probes_df_original[~probes_df_original['probe_type'].isin(excluded_probe_types)]
 probe_questions = probes_df['probe'].tolist()
 print(f"Using {len(probe_questions)} probe questions (excluded: {excluded_probe_types})")

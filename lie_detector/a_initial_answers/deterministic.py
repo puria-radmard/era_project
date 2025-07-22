@@ -33,7 +33,7 @@ truth_prompts = prompts['truth_prompts']
 lie_prompts = prompts['lie_prompts']
 
 # Load questions
-with open(f'data/{questions_data_name}.json', 'r') as f:
+with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
     question_data = json.load(f)
 
 qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) for idx in range(len(question_data['question']))]
