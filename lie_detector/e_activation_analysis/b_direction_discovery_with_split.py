@@ -42,9 +42,18 @@ truth_acts = all_truth_residual.numpy()  # [questions, layers, neurons]
 lie_acts = all_lie_residual.numpy()      # [questions, layers, neurons]
 n_questions, n_layers, n_neurons = truth_acts.shape
 
-# Calculate lie directions using all data
+# Train/test split (stratified by question)
+n_train = int(0.7 * n_questions)
+train_indices = np.random.choice(n_questions, n_train, replace=False)
+test_indices = np.array([i for i in range(n_questions) if i not in train_indices])
+
+train_truth = truth_acts[train_indices]  # [train_questions, layers, neurons]
+train_lie = lie_acts[train_indices]
+test_truth = truth_acts[test_indices]    # [test_questions, layers, neurons]
+test_lie = lie_acts[test_indices]
+
 # [layers, neurons]
-lie_directions = (lie_acts - truth_acts).mean(0)
+lie_directions = (train_lie - train_truth).mean(0)
 lie_directions_normalized = lie_directions / np.sqrt(np.square(lie_directions).sum(-1, keepdims=True))
 
 # [num_controls, layers, neurons] - random normal vectors, normalized along neurons
@@ -52,12 +61,12 @@ num_controls = 16
 control_lie_directions_normalized = np.random.randn(num_controls, n_layers, n_neurons)
 control_lie_directions_normalized /= np.linalg.norm(control_lie_directions_normalized, axis=-1, keepdims=True)
 
-# Project all activations onto lie directions
-truth_projections = np.zeros((n_questions, n_layers))
-lie_projections = np.zeros((n_questions, n_layers))
+# Project test set activations onto lie directions
+test_truth_projections = np.zeros((len(test_indices), n_layers))
+test_lie_projections = np.zeros((len(test_indices), n_layers))
 
-truth_projections_control = np.zeros((n_questions, num_controls, n_layers))
-lie_projections_control = np.zeros((n_questions, num_controls, n_layers))
+test_truth_projections_control = np.zeros((len(test_indices), num_controls, n_layers))
+test_lie_projections_control = np.zeros((len(test_indices), num_controls, n_layers))
 
 results = {}
 
@@ -65,19 +74,19 @@ for layer in range(n_layers):
     direction = lie_directions_normalized[layer, :]
     control_directions = control_lie_directions_normalized[:, layer, :]
     
-    # Project each question's activations onto the direction
-    for q_idx in range(n_questions):
-        truth_projections[q_idx, layer] = np.dot(truth_acts[q_idx, layer, :], direction)
-        lie_projections[q_idx, layer] = np.dot(lie_acts[q_idx, layer, :], direction)
+    # Project each test question's activations onto the direction
+    for q_idx in range(len(test_indices)):
+        test_truth_projections[q_idx, layer] = np.dot(test_truth[q_idx, layer, :], direction)
+        test_lie_projections[q_idx, layer] = np.dot(test_lie[q_idx, layer, :], direction)
 
         for c_idx in range(num_controls):
             control_direction = control_directions[c_idx]
-            truth_projections_control[q_idx, c_idx, layer] = np.dot(truth_acts[q_idx, layer, :], control_direction)
-            lie_projections_control[q_idx, c_idx, layer] = np.dot(lie_acts[q_idx, layer, :], control_direction)
+            test_truth_projections_control[q_idx, c_idx, layer] = np.dot(test_truth[q_idx, layer, :], control_direction)
+            test_lie_projections_control[q_idx, c_idx, layer] = np.dot(test_lie[q_idx, layer, :], control_direction)
 
     # Statistical analysis for each layer
-    truth_projs = truth_projections[:, layer]
-    lie_projs = lie_projections[:, layer]
+    truth_projs = test_truth_projections[:, layer]
+    lie_projs = test_lie_projections[:, layer]
     
     # Paired t-test (since same questions used for both conditions)
     t_stat, p_value = stats.ttest_rel(lie_projs, truth_projs)
@@ -103,8 +112,8 @@ for layer in range(n_layers):
     print(f"Layer {layer}: Truth={np.mean(truth_projs):.3f}, Lie={np.mean(lie_projs):.3f}, "
           f"Cohen's d={cohens_d:.3f}, p={p_value:.3f}")
 
-# Save results after all layers are processed
-np.save(os.path.join(save_base, 'prompted_projection_along_average_lie_vector.npy'), results)
+    np.save(os.path.join(save_base, 'prompted_projection_along_average_lie_vector.npy'), results)
+
 
 # Visualization
 fig, axes = plt.subplots(7, 5, figsize=(9, 12))  # Adjust grid size as needed
@@ -114,8 +123,8 @@ for layer in range(n_layers):  # Show first 25 layers
     ax = axes[layer]
     
     # Histogram both distributions
-    ax.hist(truth_projections[:, layer], alpha=0.5, label='Truth', bins=20)
-    ax.hist(lie_projections[:, layer], alpha=0.5, label='Lie', bins=20)
+    ax.hist(test_truth_projections[:, layer], alpha=0.5, label='Truth', bins=20)
+    ax.hist(test_lie_projections[:, layer], alpha=0.5, label='Lie', bins=20)
     
     ax.set_title(f'Layer {layer} (d={results[layer]["cohens_d"]:.2f})')
     ax.legend()
@@ -125,6 +134,8 @@ for layer in range(n_layers):  # Show first 25 layers
 plt.tight_layout()
 plt.savefig(os.path.join(save_base, 'projection_along_average_lie_vector.png'))
 
+
+
 # Visualization
 fig, axes = plt.subplots(7, 5, figsize=(9, 12))  # Adjust grid size as needed
 axes = axes.flatten()
@@ -133,8 +144,8 @@ for layer in range(n_layers):  # Show first 25 layers
     ax = axes[layer]
     
     # Histogram both distributions
-    ax.hist(truth_projections_control[:, 0, layer], alpha=0.5, label='Truth', bins=20)
-    ax.hist(lie_projections_control[:, 0, layer], alpha=0.5, label='Lie', bins=20)
+    ax.hist(test_truth_projections_control[:, 0, layer], alpha=0.5, label='Truth', bins=20)
+    ax.hist(test_lie_projections_control[:, 0, layer], alpha=0.5, label='Lie', bins=20)
     
     ax.set_title(f'Layer {layer} (d={results[layer]["cohens_d"]:.2f})')
     ax.legend()
@@ -144,11 +155,14 @@ for layer in range(n_layers):  # Show first 25 layers
 plt.tight_layout()
 plt.savefig(os.path.join(save_base, 'projection_along_control_vector.png'))
 
+
+
 # Find layers with strongest separation
 effect_sizes = [results[layer]['cohens_d'] for layer in range(n_layers)]
 best_layers = np.argsort(np.abs(effect_sizes))[-5:]  # Top 5 layers by effect size
 print(f"\nLayers with strongest lie/truth separation: {best_layers}")
 print(f"Effect sizes: {[effect_sizes[i] for i in best_layers]}")
+
 
 ##########################################################################################
 ##########################################################################################
@@ -171,6 +185,8 @@ num_context_lengths = len(context_lengths)
 fig, contextual_axes = plt.subplots(num_context_lengths, n_layers, figsize = (5 * n_layers, 5 * num_context_lengths))
 fig_control, contextual_axes_control = plt.subplots(num_context_lengths, n_layers, figsize = (5 * n_layers, 5 * num_context_lengths))
 
+context_type = 'top_lie_shuffled_together'
+
 all_contextual_data = []
 
 for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_lengths)):
@@ -186,14 +202,14 @@ for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_
         except FileNotFoundError:
             continue
 
-        # [questions, n_samples, num_candidate_layers, residual_stream_sizes]
-        # Use all questions instead of just test questions
+        # [test_questions, n_samples, num_candidate_layers, residual_stream_sizes]
+        test_context_driven_residuals = context_driven_residuals[test_indices]
 
-        # [questions, num_candidate_layers, residual_stream_sizes]
-        sampled_averaged_context_driven_residuals = context_driven_residuals.mean(1)
+        # [test_questions, num_candidate_layers, residual_stream_sizes]
+        sampled_averaged_test_context_driven_residuals = test_context_driven_residuals.mean(1)
 
-        context_projections = np.zeros((n_questions, n_layers))
-        context_projections_control = np.zeros((n_questions, num_controls, n_layers))
+        test_context_projections = np.zeros((len(test_indices), n_layers))
+        test_context_projections_control = np.zeros((len(test_indices), num_controls, n_layers))
 
         for layer in tqdm(range(n_layers)):
 
@@ -201,25 +217,26 @@ for cli, context_length in tqdm(enumerate(context_lengths), total = len(context_
             
             direction = lie_directions_normalized[layer, :]
             
-            # Project each question's activations onto the direction
-            context_projections[:,layer] = (sampled_averaged_context_driven_residuals[:, layer, :] * direction[None]).sum(-1)
-            context_projections_control[:, :, layer] = (sampled_averaged_context_driven_residuals[:, layer, None] * control_lie_directions_normalized[:, layer, :][None]).sum(-1)
+            # Project each test question's activations onto the direction
+            test_context_projections[:,layer] = (sampled_averaged_test_context_driven_residuals[:, layer, :] * direction[None]).sum(-1)
+            test_context_projections_control[:, :, layer] = (sampled_averaged_test_context_driven_residuals[:, layer, None] * control_lie_directions_normalized[:, layer, :][None]).sum(-1)
 
-            contextual_axes[cli, layer].hist(context_projections[:, layer], alpha=0.5, label=context_type, bins=20)
-            contextual_axes_control[cli, layer].hist(context_projections_control[:, 0, layer], alpha=0.5, label=context_type, bins=20)
+            contextual_axes[cli, layer].hist(test_context_projections[:, layer], alpha=0.5, label=context_type, bins=20)
+            contextual_axes_control[cli, layer].hist(test_context_projections_control[:, 0, layer], alpha=0.5, label=context_type, bins=20)
 
         all_contextual_data.append({
             'context_length': context_length,
             'context_type': context_type,
-            'projections': context_projections,
-            'control_projections': context_projections_control
+            'projections': test_context_projections,
+            'control_projections': test_context_projections_control
         })
+    np.save(os.path.join(save_base, 'contextual_projection_along_average_lie_vector.npy'), all_contextual_data)
 
     contextual_axes[cli,-1].legend(title = 'Context type')
     contextual_axes_control[cli,-1].legend(title = 'Context type')
 
-    # Save contextual results after all processing is complete
-    np.save(os.path.join(save_base, 'contextual_projection_along_average_lie_vector.npy'), all_contextual_data)
-
     fig.savefig(os.path.join(save_base, 'contextual_projection_along_average_lie_vector.png'))
     fig_control.savefig(os.path.join(save_base, 'contextual_projection_along_control_vector.png'))
+
+
+

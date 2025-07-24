@@ -373,10 +373,6 @@ for iN, N in enumerate(context_lengths_desc):
     plt.close()
 
 
-
-
-
-
     # Save detailed results so far
     for context_type in context_types:
         context_type_npy_path = os.path.join(output_path, f'context_effect_results_{context_type}.npy')

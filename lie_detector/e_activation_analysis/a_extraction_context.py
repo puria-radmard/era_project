@@ -3,7 +3,7 @@ import numpy as np
 import json
 import matplotlib.pyplot as plt
 import torch
-import random
+import math
 
 from model.load import load_model
 
@@ -184,13 +184,14 @@ for iN, N in enumerate(context_lengths_desc):
     elif probe_response_type.endswith('_words'):
         all_context_materials = [get_context_freeform(N, valid_probe_results, probes_df_original, most_truth_answers, most_lie_answers) for _ in range(n_samples)]
 
-    
-    for context_type in context_types:
-        print(f"\nTesting context type: {context_type} - iterating over samples")
+    n_samples_eff = min(n_samples, math.perm(N, N))
 
-        residuals_per_N_per_context = np.zeros([num_questions, n_samples, num_candidate_layers, residual_stream_size])
+    for context_type in context_types:
+        print(f"\nTesting context type: {context_type} - iterating over {N} samples")
+
+        residuals_per_N_per_context = np.zeros([num_questions, n_samples_eff, num_candidate_layers, residual_stream_size])
         
-        for sample_idx in tqdm(range(n_samples)):
+        for sample_idx in tqdm(range(n_samples_eff)):
 
             context_materials = all_context_materials[sample_idx]
             
