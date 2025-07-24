@@ -26,17 +26,15 @@ initial_answers_df_path = os.path.join(save_base, "initial_answers.csv")
 
 
 # Load prompts
-with open('data/prompts.json', 'r') as f:
+with open('data/all_prompts.json', 'r') as f:
     prompts = json.load(f)
 
 truth_prompts = prompts['truth_prompts']
 lie_prompts = prompts['lie_prompts']
 
 # Load questions
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
-
-qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) for idx in range(len(question_data['question']))]
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
+qa_pairs = [(initial_questions_df['question'][idx].strip(), str(initial_questions_df['answer'][idx])) for idx in range(len(initial_questions_df['question']))]
 assert set([len(qa[1].split()) for qa in qa_pairs]) == {1}
 
 # Load model

@@ -18,6 +18,8 @@ model_name = args.model_name
 initial_answers_args_name = args.initial_answers_args_name
 question_instruction = args.question_instruction
 
+hidden_state_size = args.hidden_state_size
+
 limit_to_lying = args.limit_to_lying
 
 prompt_index = args.prompt_idx
@@ -30,13 +32,14 @@ initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', in
 probe_response_path = os.path.join(save_base, 'probe_response.csv')
 
 response_data = pd.read_csv(initial_answers_path)
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
+
+print("Loading test questions...")
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
 
 
 
 # Get the prompts which most reliably cause lies 
-with open('data/prompts.json', 'r') as f:
+with open('data/all_prompts.json', 'r') as f:
     prompts = json.load(f)
     lie_prompt = prompts['lie_prompts'][prompt_index]
     truth_prompt = prompts['truth_prompts'][prompt_index]
@@ -55,7 +58,7 @@ candidate_layers = list(range(32))
 
 num_questions = len(trainable_questions_idxs)
 num_candidate_layers = len(candidate_layers)
-residual_stream_size = 4096
+residual_stream_size = hidden_state_size
 
 all_truth_residual = torch.zeros(num_questions, num_candidate_layers, residual_stream_size)
 all_lie_residual = torch.zeros(num_questions, num_candidate_layers, residual_stream_size)
@@ -63,7 +66,7 @@ all_lie_residual = torch.zeros(num_questions, num_candidate_layers, residual_str
 # Loop over these questions
 for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_questions_idxs)):
 
-    question = question_data['question'][f'{qai}'].strip()
+    question = initial_questions_df['question'][qai].strip()
     response_row = trainable_answers[trainable_answers['question_idx'] == qai]
 
     question_instruction
@@ -89,6 +92,7 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
     )
 
     for cli, layer_idx in enumerate(candidate_layers):
+
         all_truth_residual[i,cli,:] = truth_outputs.hidden_states[layer_idx + 1][0,-1,:]
         all_lie_residual[i,cli,:] = lie_outputs.hidden_states[layer_idx + 1][0,-1,:]
 

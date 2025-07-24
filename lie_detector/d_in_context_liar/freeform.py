@@ -69,11 +69,10 @@ print(f"Filtered to {len(filtered_answers_df)} questions")
 
 # 4. Load questions data and create QA pairs
 print("Loading test questions...")
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
+import pdb; pdb.set_trace(header = 'check qa_pairs works here!')
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
+qa_pairs = [(initial_questions_df['question'][idx].strip(), str(initial_questions_df['answer'][idx])) for idx in range(len(initial_questions_df['question']))]
 
-qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) 
-            for idx in range(len(question_data['question']))]
 
 # Filter QA pairs to only include questions we have in filtered_answers_df
 valid_qa_pairs = [qa_pairs[idx] for idx in filtered_answers_df['question_idx']]

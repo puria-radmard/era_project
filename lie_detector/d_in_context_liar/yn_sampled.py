@@ -1,12 +1,13 @@
+import math
 import pandas as pd
 import numpy as np
 import json
 import matplotlib.pyplot as plt
 import torch
-from typing import List, Dict, Optional
-import random
 from scipy.stats import ttest_rel
 import torch.nn.functional as F
+from transformers.cache_utils import DynamicCache
+
 
 from model.load import load_model
 from util.elicit import elicit_sequence_log_probs
@@ -22,11 +23,12 @@ from tqdm import tqdm
 config_path = sys.argv[1]
 args = YamlConfig(config_path)
 
-batch_size = args.batch_size
 system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
 question_instruction = args.question_instruction
+
+num_initial_generation_samples = args.num_initial_generation_samples
 
 initial_answers_args_name = args.initial_answers_args_name
 probe_responses_args_name = args.probe_responses_args_name
@@ -70,11 +72,9 @@ print(f"Filtered to {len(stochastic_df)} rows with valid question IDs")
 
 # Load questions data and create QA pairs
 print("Loading test questions...")
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
+qa_pairs = [(initial_questions_df['question'][idx].strip(), str(initial_questions_df['answer'][idx])) for idx in range(len(initial_questions_df['question']))]
 
-qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) 
-            for idx in range(len(question_data['question']))]
 
 # Load probe questions for context
 probes_df_original = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')
@@ -127,11 +127,17 @@ all_results = {context_type: {
     'mean_truth_lie_diff': np.full((num_context_lengths, ), np.nan),
     'std_truth_lie_diff': np.full((num_context_lengths, ), np.nan),
     'question_truth_lie_diffs_across_samples': np.full((num_context_lengths, len(unique_questions), n_samples), np.nan),
+    'question_truth_log_probs_across_samples': np.full((num_context_lengths, len(unique_questions), n_samples, num_initial_generation_samples), np.nan),
+    'question_lie_log_probs_across_samples': np.full((num_context_lengths, len(unique_questions), n_samples, num_initial_generation_samples), np.nan),
     } for context_type in context_types
 }
 
+
+question_types = initial_questions_df['type'].unique()
+num_initial_question_types = len(question_types)
+
 # Process each context length
-context_lengths_desc = sorted(context_lengths, reverse=True)
+context_lengths_desc = sorted(context_lengths, reverse=False)
 
 for iN, N in enumerate(context_lengths_desc):
     print(f"\n{'='*80}")
@@ -142,37 +148,34 @@ for iN, N in enumerate(context_lengths_desc):
     all_context_materials = [get_context_yn(N, valid_probe_results, probes_df_original) for _ in range(n_samples)]
     
     for context_type in context_types:
-        print(f"\n\tTesting context type: {context_type}")
+        n_samples_eff = min(n_samples, math.perm(N, N))
+        print(f"\n\tTesting context type: {context_type} - taking {n_samples_eff} samples")
         
-        question_truth_lie_diffs_across_samples = np.full((len(unique_questions), n_samples), np.nan)
+        question_truth_lie_diffs_across_samples = np.full((len(unique_questions), n_samples_eff), np.nan)
+        question_truth_log_probs_across_samples = np.full((len(unique_questions), n_samples_eff, num_initial_generation_samples), np.nan)
+        question_lie_log_probs_across_samples = np.full((len(unique_questions), n_samples_eff, num_initial_generation_samples), np.nan)
         
-        for sample_idx in range(n_samples):
+        for sample_idx in range(n_samples_eff):
 
-            print(f"\n\t\tSample {sample_idx} for this context type. Iterating over questions")
+            print(f"\n\t\tSample {sample_idx + 1} of {n_samples_eff} for this context type. Iterating over questions")
             
             context_materials = all_context_materials[sample_idx]
             
             # Get the specific questions and answers for this context type
-            if N == 0:
-                shared_in_context_questions = None
-                shared_in_context_answers = None
-            else:
+            if N > 0:
                 shared_in_context_questions, shared_in_context_answers = context_materials[context_type]
             
-            # Create base cache with system prompt and in-context examples
-            base_cache_info = chat_wrapper.create_prompt_cache(
-                system_prompt=system_prompt,
-                in_context_questions=shared_in_context_questions,
-                in_context_answers=shared_in_context_answers,
-                prefiller=None
-            )
+                # Create base cache with system prompt and in-context examples
+                base_cache_info = chat_wrapper.create_prompt_cache(
+                    system_prompt=system_prompt,
+                    in_context_questions=shared_in_context_questions,
+                    in_context_answers=shared_in_context_answers,
+                    prefiller=None
+                )
             
             # Process each question individually
-            for q_idx_pos, question_idx in tqdm(enumerate(unique_questions)):
+            for q_idx_pos, question_idx in tqdm(enumerate(unique_questions), total = len(unique_questions)):
                 question = qa_pairs[question_idx][0]
-                
-                # Clone base cache for this question
-                question_cache = copy.deepcopy(base_cache_info)
                 
                 # Extend cache with the question
                 full_question = question + f' {question_instruction}'
@@ -181,20 +184,28 @@ for iN, N in enumerate(context_lengths_desc):
                     return_tensors="pt",
                     add_special_tokens=False
                 ).to(chat_wrapper.device)
+
+                if N > 0:
+                    # Clone base cache for this question
+                    question_cache = copy.deepcopy(base_cache_info)
+                    
+                    # Get cache length and create proper attention mask
+                    cache_length = question_cache["cache"].get_seq_length()
+                    full_attention_mask = torch.cat([
+                        torch.ones(1, cache_length, device=chat_wrapper.device),
+                        question_inputs.attention_mask
+                    ], dim=1)
                 
-                # Get cache length and create proper attention mask
-                cache_length = question_cache["cache"].get_seq_length()
-                full_attention_mask = torch.cat([
-                    torch.ones(1, cache_length, device=chat_wrapper.device),
-                    question_inputs.attention_mask
-                ], dim=1)
-                
+                else:
+                    question_cache = {}
+                    full_attention_mask = question_inputs.attention_mask
+
                 # Extend the cache with the question
                 with torch.no_grad():
                     question_outputs = chat_wrapper.model(
                         input_ids=question_inputs.input_ids,
                         attention_mask=full_attention_mask,
-                        past_key_values=question_cache["cache"],
+                        past_key_values=question_cache["cache"] if N > 0 else None,
                         use_cache=True,
                         return_dict=True
                     )
@@ -215,7 +226,10 @@ for iN, N in enumerate(context_lengths_desc):
                 avg_truth_log_prob = truth_log_probs.mean().item() if len(truth_log_probs) > 0 else 0.0
                 avg_lie_log_prob = lie_log_probs.mean().item() if len(lie_log_probs) > 0 else 0.0
                 truth_lie_diff = avg_truth_log_prob - avg_lie_log_prob
-                
+
+
+                question_truth_log_probs_across_samples[q_idx_pos, sample_idx] = truth_log_probs
+                question_lie_log_probs_across_samples[q_idx_pos, sample_idx] = lie_log_probs
                 question_truth_lie_diffs_across_samples[q_idx_pos, sample_idx] = truth_lie_diff
         
         # Store results
@@ -223,7 +237,9 @@ for iN, N in enumerate(context_lengths_desc):
         all_results[context_type]['context_type'][iN] = context_type
         all_results[context_type]['mean_truth_lie_diff'][iN] = np.mean(question_truth_lie_diffs_across_samples)
         all_results[context_type]['std_truth_lie_diff'][iN] = np.std(question_truth_lie_diffs_across_samples.mean(-1))
-        all_results[context_type]['question_truth_lie_diffs_across_samples'][iN] = question_truth_lie_diffs_across_samples
+        all_results[context_type]['question_truth_lie_diffs_across_samples'][iN, :, :n_samples_eff] = question_truth_lie_diffs_across_samples
+        all_results[context_type]['question_lie_log_probs_across_samples'][iN, :, :n_samples_eff] = question_lie_log_probs_across_samples
+        all_results[context_type]['question_truth_log_probs_across_samples'][iN, :, :n_samples_eff] = question_truth_log_probs_across_samples
 
         print(f"{context_type} results for {len(question_truth_lie_diffs_across_samples)} questions:")
         print(f"  Mean truth-lie log prob diff: {all_results[context_type]['mean_truth_lie_diff'][iN]:.4f} ± {all_results[context_type]['std_truth_lie_diff'][iN]:.4f}")
@@ -236,10 +252,10 @@ for iN, N in enumerate(context_lengths_desc):
 
     for i, context_type in enumerate(context_types):
         results = all_results[context_type]
-        
-        context_lengths_plot = [r['context_length'] for r in results]
-        mean_diffs = [r['mean_truth_lie_diff'] for r in results]
-        std_diffs = [r['std_truth_lie_diff'] for r in results]
+
+        context_lengths_plot = results['context_length']
+        mean_diffs = results['mean_truth_lie_diff']
+        std_diffs = results['std_truth_lie_diff']
         
         # Add small jitter to x-values to separate overlapping points
         jitter = (i - len(context_types)/2) * 0.05
@@ -251,24 +267,28 @@ for iN, N in enumerate(context_lengths_desc):
                     color=colors[i], alpha=0.8)
 
     # Add significance testing between lie and truth contexts
-    if len(all_results['top_lie_shuffled_together']) > 0 and len(all_results['top_truth_shuffled_together']) > 0:
+    if 'top_lie_shuffled_together' in all_results and 'top_truth_shuffled_together' in all_results:
         lie_results = all_results['top_lie_shuffled_together']
         truth_results = all_results['top_truth_shuffled_together']
         
-        for lie_result, truth_result in zip(lie_results, truth_results):
-            if lie_result['context_length'] == truth_result['context_length']:
-                N_current = lie_result['context_length']
+        for length_idx in range(num_context_lengths):
+
+            if not np.isnan(lie_results['context_length'][length_idx]) and not np.isnan(truth_results['context_length'][length_idx]):
+
+                N_current = lie_results['context_length'][length_idx]
+                n_samples_eff = min(n_samples, math.perm(int(N_current), int(N_current)))
                 
-                lie_diffs = lie_result['question_truth_lie_diffs']
-                truth_diffs = truth_result['question_truth_lie_diffs']
+                # Get question means across samples for both contexts
+                lie_question_means = np.mean(lie_results['question_truth_lie_diffs_across_samples'][length_idx, :, :n_samples_eff], axis=1)
+                truth_question_means = np.mean(truth_results['question_truth_lie_diffs_across_samples'][length_idx, :, :n_samples_eff], axis=1)
                 
-                if len(lie_diffs) > 1 and len(truth_diffs) > 1:
-                    stat, p_value = ttest_rel(lie_diffs, truth_diffs)
+                if len(lie_question_means) > 1 and len(truth_question_means) > 1:
+                    stat, p_value = ttest_rel(lie_question_means, truth_question_means)
                     
                     if p_value < 0.05:
                         max_y = max(
-                            lie_result['mean_truth_lie_diff'] + lie_result['std_truth_lie_diff'],
-                            truth_result['mean_truth_lie_diff'] + truth_result['std_truth_lie_diff']
+                            lie_results['mean_truth_lie_diff'][length_idx] + lie_results['std_truth_lie_diff'][length_idx],
+                            truth_results['mean_truth_lie_diff'][length_idx] + truth_results['std_truth_lie_diff'][length_idx]
                         )
                         axes.text(N_current, max_y + 0.01, '*', 
                                 ha='center', va='bottom', fontsize=16, fontweight='bold')
@@ -282,6 +302,80 @@ for iN, N in enumerate(context_lengths_desc):
     plt.tight_layout()
     plt.savefig(os.path.join(output_path, 'context_effect_analysis.png'), dpi=300, bbox_inches='tight')
     plt.close()
+
+
+
+    # Create figure separated by question type
+    fig, axes = plt.subplots(num_initial_question_types, 1, figsize=(14, 5*num_initial_question_types))
+    if num_initial_question_types == 1:
+        axes = [axes]
+
+    colors = plt.cm.tab10(np.linspace(0, 1, len(context_types)))
+
+    for type_idx, question_type in enumerate(question_types):
+        # Get questions of this type
+        type_question_indices = initial_questions_df[initial_questions_df['type'] == question_type].index.tolist()
+        # Find which positions in unique_questions correspond to this type
+        type_positions = [i for i, q_idx in enumerate(unique_questions) if q_idx in type_question_indices]
+        
+        for i, context_type in enumerate(context_types):
+            results = all_results[context_type]
+            
+            # Extract data for completed context lengths
+            completed_lengths = []
+            type_means = []
+            type_stds = []
+            individual_question_data = []
+            
+            for length_idx in range(num_context_lengths):
+                if not np.isnan(results['context_length'][length_idx]):
+                    N_current = results['context_length'][length_idx]
+                    completed_lengths.append(N_current)
+                    
+                    # Get data for this question type
+                    n_samples_eff = min(n_samples, math.perm(int(N_current), int(N_current)))
+                    type_data = results['question_truth_lie_diffs_across_samples'][length_idx][type_positions, :n_samples_eff]
+                    question_means = np.mean(type_data, axis=1)  # Mean across samples for each question
+                    
+                    # Store individual question means for plotting
+                    individual_question_data.append(question_means)
+                    
+                    # Calculate mean and std across questions of this type
+                    type_means.append(np.mean(question_means))
+                    type_stds.append(np.std(question_means))
+            
+            if len(completed_lengths) > 0:
+                # Add small jitter to x-values
+                jitter = (i - len(context_types)/2) * 0.05
+                x_values = np.array(completed_lengths) + jitter
+                
+                # Plot mean line with error bars (normal alpha)
+                axes[type_idx].errorbar(x_values, type_means, yerr=type_stds,
+                                    label=f'{context_type.replace("_", " ").title()}',
+                                    marker='o', capsize=3, capthick=1, linewidth=2, markersize=6,
+                                    color=colors[i], alpha=0.8)
+                
+                # Plot individual question lines (low alpha)
+                for q_pos in range(len(type_positions)):
+                    individual_means = [individual_question_data[length_idx][q_pos] for length_idx in range(len(completed_lengths))]
+                    axes[type_idx].plot(x_values, individual_means, 
+                                    color=colors[i], alpha=0.2, linewidth=1)
+        
+        axes[type_idx].set_xlabel('Context Length (N)')
+        axes[type_idx].set_ylabel('Mean Log P(Truth) - Log P(Lie)')
+        axes[type_idx].set_title(f'{question_type} Questions')
+        axes[type_idx].legend()
+        axes[type_idx].grid(True, alpha=0.3)
+
+    plt.suptitle('Truth vs Lie Log Probability Differences by Question Type and Context Composition')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, 'context_effect_by_question_type.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+
+
+
 
     # Save detailed results so far
     for context_type in context_types:

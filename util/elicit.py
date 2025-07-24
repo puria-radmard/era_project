@@ -485,7 +485,7 @@ def elicit_next_token_probs(
 
 
 def elicit_sequence_log_probs(
-    chat_wrapper,
+    chat_wrapper: ChatTemplateWrapper,
     question_cache: Dict,
     response_sequences: List[str],
 ) -> torch.Tensor:
@@ -513,7 +513,7 @@ def elicit_sequence_log_probs(
     
     # Get log probabilities for each sequence
     sequence_log_probs = []
-    
+
     for tokens in sequence_token_ids:
         if len(tokens) == 0:
             sequence_log_probs.append(0.0)
@@ -550,7 +550,7 @@ def elicit_sequence_log_probs(
         # Calculate log probabilities
         log_probs = F.log_softmax(logits, dim=-1)
         token_log_probs = log_probs[range(len(target_tokens)), target_tokens]
-        
+
         # Average log probability per token
         avg_log_prob = token_log_probs.mean().item()
         sequence_log_probs.append(avg_log_prob)

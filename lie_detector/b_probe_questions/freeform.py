@@ -6,6 +6,7 @@ from model.load import load_model
 from util.util import YamlConfig
 
 import os, sys
+from math import ceil
 
 config_path = sys.argv[1]
 args = YamlConfig(config_path)
@@ -18,6 +19,11 @@ initial_answers_args_name = args.initial_answers_args_name
 probe_file_name = args.probe_file_name
 probe_response_type: str = args.probe_response_type
 question_instruction = args.question_instruction
+
+try:
+    batch_size = args.batch_size
+except AttributeError:
+    batch_size = None
 
 assert probe_response_type.endswith('_words')
 
@@ -35,12 +41,12 @@ probe_response_path = os.path.join(save_base, 'probe_response.csv')
 
 
 response_data = pd.read_csv(initial_answers_path)
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
+
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
 
 
 # Get the prompts which most reliably cause lies 
-with open('data/prompts.json', 'r') as f:
+with open('data/all_prompts.json', 'r') as f:
     prompts = json.load(f)
     lie_prompt = prompts['lie_prompts'][prompt_index]
     truth_prompt = prompts['truth_prompts'][prompt_index]
@@ -64,67 +70,74 @@ probe_questions = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')['pr
 probe_results_df = pd.DataFrame(columns=['question_idx', 'truth', 'probe_question_idx', 'resp'])
 
 
+num_probe_questions = len(probe_questions)
+probe_index_batches = [
+    list(range(i, min(i + batch_size, num_probe_questions)))
+    for i in range(0, num_probe_questions, batch_size)
+]
+
 # Loop over these questions
 for qai in tqdm(trainable_questions_idxs):
 
-    question = question_data['question'][f'{qai}'].strip()
+    question = initial_questions_df['question'][qai].strip()
     response_row = trainable_answers[trainable_answers['question_idx'] == qai]
 
-    truth_followup_chats = [
-        chat_wrapper.format_chat(
-            system_prompt=system_prompt,
-            in_context_questions=[f'{truth_prompt} {question} {question_instruction}'],
-            in_context_answers=[response_row.truth_answer.item()],
-            user_message=probe_question,
-            prefiller='',
-        ) for probe_question in probe_questions
-    ]
-    truth_generate = chat_wrapper.generate_parallel(
-        chats = truth_followup_chats,
-        temperature = None,
-        top_p = None,
-        do_sample = False
-    )
+    for probe_index_batch in probe_index_batches:
+
+        truth_followup_chats = [
+            chat_wrapper.format_chat(
+                system_prompt=system_prompt,
+                in_context_questions=[f'{truth_prompt} {question} {question_instruction}'],
+                in_context_answers=[response_row.truth_answer.item()],
+                user_message=probe_questions[pi],
+                prefiller='',
+            ) for pi in probe_index_batch
+        ]
+        truth_generate = chat_wrapper.generate_parallel(
+            chats = truth_followup_chats,
+            temperature = None,
+            top_p = None,
+            do_sample = False
+        )
 
 
-    lie_followup_chats = [
-        chat_wrapper.format_chat(
-            system_prompt=system_prompt,
-            in_context_questions=[f'{lie_prompt} {question} {question_instruction}'],
-            in_context_answers=[response_row.lie_answer.item()],
-            user_message=probe_question,
-            prefiller='',
-        ) for probe_question in probe_questions
-    ]
-    lie_generate = chat_wrapper.generate_parallel(
-        chats = lie_followup_chats,
-        temperature = None,
-        top_p = None,
-        do_sample = False
-    )
+        lie_followup_chats = [
+            chat_wrapper.format_chat(
+                system_prompt=system_prompt,
+                in_context_questions=[f'{lie_prompt} {question} {question_instruction}'],
+                in_context_answers=[response_row.lie_answer.item()],
+                user_message=probe_questions[pi],
+                prefiller='',
+            ) for pi in probe_index_batch
+        ]
+        lie_generate = chat_wrapper.generate_parallel(
+            chats = lie_followup_chats,
+            temperature = None,
+            top_p = None,
+            do_sample = False
+        )
 
 
-    # Append results
-    num_probe_questions = len(lie_generate['generated_texts'])
-    rows = []
-    for probe_idx in range(num_probe_questions):
+        # Append results
+        rows = []
+        for probe_idx_in_batch, probe_idx in enumerate(probe_index_batch):
 
-        resp_truth = truth_generate['generated_texts'][probe_idx].removesuffix('<|eot_id|>')
-        rows.append({
-            'question_idx': qai,
-            'truth': 1,
-            'probe_question_idx': probe_idx,
-            'resp': resp_truth,
-        })
+            resp_truth = truth_generate['generated_texts'][probe_idx_in_batch].removesuffix('<|eot_id|>')
+            rows.append({
+                'question_idx': qai,
+                'truth': 1,
+                'probe_question_idx': probe_idx,
+                'resp': resp_truth,
+            })
 
-        resp_lie = lie_generate['generated_texts'][probe_idx].removesuffix('<|eot_id|>')
-        rows.append({
-            'question_idx': qai,
-            'truth': 0,
-            'probe_question_idx': probe_idx,
-            'resp': resp_lie,
-        })
+            resp_lie = lie_generate['generated_texts'][probe_idx_in_batch].removesuffix('<|eot_id|>')
+            rows.append({
+                'question_idx': qai,
+                'truth': 0,
+                'probe_question_idx': probe_idx,
+                'resp': resp_lie,
+            })
 
-    probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
-    probe_results_df.to_csv(probe_response_path, index=False)
-    
+        probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
+        probe_results_df.to_csv(probe_response_path, index=False)
+        

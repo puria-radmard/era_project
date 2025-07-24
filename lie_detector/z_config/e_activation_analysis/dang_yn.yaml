@@ -15,4 +15,3 @@ samples_per_context_length_activations: 5
 excluded_probe_types: []  # Already reduced!
 icl_sorting_key: effect_size
 limit_to_lying: false
-

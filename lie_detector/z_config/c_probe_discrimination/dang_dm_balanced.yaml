@@ -1,0 +1,7 @@
+probe_file_name: "probes_with_yn_unknowable"
+probe_response_type: yn
+probe_responses_args_name: dang_dm_balanced
+samples_per_classifier_size: 0  # Don't care about actual classifiers
+
+questions_data_name: "dangerous_advice_balanced"
+narrow_misalignment_type: "Sports"

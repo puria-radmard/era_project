@@ -71,11 +71,9 @@ print(f"Filtered to {len(stochastic_df)} rows with valid question IDs")
 
 # Load questions data and create QA pairs
 print("Loading test questions...")
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
-
-qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) 
-            for idx in range(len(question_data['question']))]
+import pdb; pdb.set_trace(header = 'check qa_pairs works here!')
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
+qa_pairs = [(initial_questions_df['question'][idx].strip(), str(initial_questions_df['answer'][idx])) for idx in range(len(initial_questions_df['question']))]
 
 # Load probe questions for context
 probes_df_original = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')

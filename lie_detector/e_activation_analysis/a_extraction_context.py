@@ -28,6 +28,8 @@ initial_answers_args_name = args.initial_answers_args_name
 probe_responses_args_name = args.probe_responses_args_name
 probe_analysis_args_name = args.probe_analysis_args_name
 
+hidden_state_size = args.hidden_state_size
+
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
 
@@ -69,11 +71,10 @@ print(f"Filtered to {len(filtered_answers_df)} questions")
 
 # 4. Load questions data and create QA pairs
 print("Loading test questions...")
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
+print("Loading test questions...")
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
+qa_pairs = [(initial_questions_df['question'][idx].strip(), str(initial_questions_df['answer'][idx])) for idx in range(len(initial_questions_df['question']))]
 
-qa_pairs = [(question_data['question'][f'{idx}'].strip(), question_data['answer'][f'{idx}']) 
-            for idx in range(len(question_data['question']))]
 
 
 # Filter QA pairs to only include questions we have in filtered_answers_df
@@ -165,11 +166,11 @@ candidate_layers = list(range(32))
 num_context_lengths = len(context_lengths)
 num_candidate_layers = len(candidate_layers)
 num_questions = len(trainable_questions_idxs)
-residual_stream_size = 4096
+residual_stream_size = hidden_state_size
 
 
 # Go down in context size (largest to smallest)
-context_lengths_desc = sorted(context_lengths, reverse=True)
+context_lengths_desc = sorted(context_lengths, reverse=False)
 
 for iN, N in enumerate(context_lengths_desc):
 
@@ -185,7 +186,7 @@ for iN, N in enumerate(context_lengths_desc):
 
     
     for context_type in context_types:
-        print(f"\nTesting context type: {context_type}")
+        print(f"\nTesting context type: {context_type} - iterating over samples")
 
         residuals_per_N_per_context = np.zeros([num_questions, n_samples, num_candidate_layers, residual_stream_size])
         
@@ -194,18 +195,16 @@ for iN, N in enumerate(context_lengths_desc):
             context_materials = all_context_materials[sample_idx]
             
             # Get the specific questions and answers for this context type
-            if N == 0:
-                shared_in_context_questions = None
-                shared_in_context_answers = None
-            else:
+            if N > 0:
                 shared_in_context_questions, shared_in_context_answers = context_materials[context_type]
-
-            context_cache_info = chat_wrapper.create_prompt_cache(
-                system_prompt=system_prompt,
-                in_context_questions=shared_in_context_questions,
-                in_context_answers=shared_in_context_answers,
-                prefiller=None
-            )
+            
+                # Create base cache with system prompt and in-context examples
+                context_cache_info = chat_wrapper.create_prompt_cache(
+                    system_prompt=system_prompt,
+                    in_context_questions=shared_in_context_questions,
+                    in_context_answers=shared_in_context_answers,
+                    prefiller=None
+                )
             
             for i in range(0, num_questions, batch_size):
                 
@@ -219,7 +218,7 @@ for iN, N in enumerate(context_lengths_desc):
 
                 context_outputs = chat_wrapper.forward(
                     chats = question_chats,
-                    past_key_values=copy.deepcopy(context_cache_info['cache']),
+                    past_key_values=copy.deepcopy(context_cache_info['cache']) if N > 0 else None,
                     use_cache = True,
                     output_hidden_states = True
                 )
@@ -227,5 +226,5 @@ for iN, N in enumerate(context_lengths_desc):
 
                 for cli, layer_idx in enumerate(candidate_layers):
                     residuals_per_N_per_context[i:i+batch_size, sample_idx, cli, :] = context_hs[layer_idx + 1].cpu().numpy()[:,-1,:]
-
+                
         torch.save(residuals_per_N_per_context, os.path.join(output_path, f'all_contextual_residual_without_question_N{N}_context{context_type}.pt'))

@@ -21,27 +21,6 @@ def get_chat_wrapper_class(model_name: str) -> Type[ChatTemplateWrapper]:
     model_name_lower = model_name.lower()
 
     return ChatTemplateWrapper
-    
-    if "llama" in model_name_lower:
-        return LlamaChatWrapper
-    elif "gpt-neo" in model_name_lower:
-        return GPTNeoWrapper
-    elif "gpt" in model_name_lower or "openai" in model_name_lower:
-        return GPTChatWrapper
-    elif "alpaca" in model_name_lower:
-        return AlpacaChatWrapper
-    # elif "deepseek" in model_name_lower:
-    #     return DeepseekChatWrapper
-    # elif "qwen" in model_name_lower:
-    #     return QwenChatWrapper
-    # elif "gemma" in model_name_lower:
-    #     return GemmaChatWrapper
-    # elif "mistral" in model_name_lower:
-    #     return MistralChatWrapper
-    # elif "phi" in model_name_lower:
-    #     return PhiChatWrapper
-    else:
-        raise ValueError(model_name)
 
 
 def load_model(
@@ -64,7 +43,11 @@ def load_model(
         >>> chat_wrapper = load_model("meta-llama/Llama-2-7b-chat-hf")
         >>> # Can now call chat_wrapper.generate() or chat_wrapper.forward()
     """
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+    except TypeError:
+        tokenizer = AutoTokenizer.from_pretrained(model_name, legacy = False, from_slow = False)
+    
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -80,6 +63,7 @@ def load_model(
             model_name,
             torch_dtype=torch_dtype,
         ).to(device)
+
     
     # Determine appropriate wrapper class
     wrapper_class = get_chat_wrapper_class(model_name)

@@ -1,6 +1,8 @@
-import json
+import json, copy
 import pandas as pd
 from tqdm import tqdm
+
+import torch
 
 from model.load import load_model
 from util.elicit import get_choice_token_logits_from_token_ids
@@ -15,6 +17,11 @@ system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
 initial_answers_args_name = args.initial_answers_args_name
+
+try:
+    batch_size = args.batch_size
+except AttributeError:
+    batch_size = None
 
 probe_file_name = args.probe_file_name
 probe_response_type: str = args.probe_response_type
@@ -35,12 +42,12 @@ initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', in
 probe_response_path = os.path.join(save_base, 'probe_response.csv')
 
 response_data = pd.read_csv(initial_answers_path)
-with open(f'data/initial_questions/{questions_data_name}.json', 'r') as f:
-    question_data = json.load(f)
+
+initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
 
 
 # Get the prompts which most reliably cause lies 
-with open('data/prompts.json', 'r') as f:
+with open('data/all_prompts.json', 'r') as f:
     prompts = json.load(f)
     lie_prompt = prompts['lie_prompts'][prompt_index]
     truth_prompt = prompts['truth_prompts'][prompt_index]
@@ -81,11 +88,17 @@ probe_questions = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')['pr
 # Initialise results df
 probe_results_df = pd.DataFrame(columns=['question_idx', 'truth', 'probe_question_idx', 'prob_yes', 'prob_no'])
 
+num_probe_questions = len(probe_questions)
+probe_index_batches = [
+    list(range(i, min(i + batch_size, num_probe_questions)))
+    for i in range(0, num_probe_questions, batch_size)
+]
+
 
 # Loop over these questions
 for qai in tqdm(trainable_questions_idxs):
 
-    question = question_data['question'][f'{qai}'].strip()
+    question = initial_questions_df['question'][qai].strip()
     response_row = trainable_answers[trainable_answers['question_idx'] == qai]
 
     truth_cache_info = chat_wrapper.create_prompt_cache(
@@ -94,20 +107,8 @@ for qai in tqdm(trainable_questions_idxs):
         in_context_answers=[response_row.truth_answer.item()]
     )
     truth_cache = truth_cache_info["cache"]
-    truth_cache_str = truth_cache_info["formatted_prompt"]
-    truth_followup_chats = [
-        chat_wrapper.format_chat(
-            system_prompt=None,
-            user_message=probe_question,
-            prefiller='',
-        ) for probe_question in probe_questions
-    ]
+    # truth_cache_str = truth_cache_info["formatted_prompt"]
     # truth_generate = chat_wrapper.generate(chats = truth_followup_chats[:3], past_key_values=truth_cache, past_key_values_str = truth_cache_str)
-    truth_forward = chat_wrapper.forward(
-        chats = truth_followup_chats,
-        past_key_values = truth_cache,
-    )
-    new_probe_truth_answer_info = get_choice_token_logits_from_token_ids(truth_forward['logits'], yesno_tokens)
 
     lie_cache_info = chat_wrapper.create_prompt_cache(
         system_prompt=system_prompt,
@@ -115,49 +116,71 @@ for qai in tqdm(trainable_questions_idxs):
         in_context_answers=[response_row.lie_answer.item()]
     )
     lie_cache = lie_cache_info["cache"]
-    lie_cache_str = lie_cache_info["formatted_prompt"]
-    lie_followup_chats = [
-        chat_wrapper.format_chat(
-            system_prompt=None,
-            user_message=probe_question,
-            prefiller='',
-        ) for probe_question in probe_questions
-    ]
+    # lie_cache_str = lie_cache_info["formatted_prompt"]
     # lie_generate = chat_wrapper.generate(chats = lie_followup_chats[:3], past_key_values=lie_cache, past_key_values_str = lie_cache_str)
-    lie_forward = chat_wrapper.forward(
-        chats = lie_followup_chats,
-        past_key_values = lie_cache,
-    )
-    new_probe_lie_answer_info = get_choice_token_logits_from_token_ids(lie_forward['logits'], yesno_tokens)
-    
 
-    # Append results
-    num_probe_questions = new_probe_truth_answer_info.shape[0]
-    rows = []
-    for probe_idx in range(num_probe_questions):
-        prob_yes = new_probe_truth_answer_info[probe_idx, 0].item()
-        prob_no = new_probe_truth_answer_info[probe_idx, 1].item()
-        rows.append({
-            'question_idx': qai,
-            'truth': 1,
-            'probe_question_idx': probe_idx,
-            'prob_yes': prob_yes,
-            'prob_no': prob_no
-        })
+    for probe_index_batch in probe_index_batches:
 
-        prob_yes = new_probe_lie_answer_info[probe_idx, 0].item()
-        prob_no = new_probe_lie_answer_info[probe_idx, 1].item()
-        rows.append({
-            'question_idx': qai,
-            'truth': 0,
-            'probe_question_idx': probe_idx,
-            'prob_yes': prob_yes,
-            'prob_no': prob_no
-        })
-
-    probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
-    probe_results_df.to_csv(probe_response_path, index = False)
+        truth_followup_chats = [
+            chat_wrapper.format_chat(
+                system_prompt=None,
+                user_message=probe_questions[pi],
+                prefiller='',
+            ) for pi in probe_index_batch
+        ]
+        truth_forward = chat_wrapper.forward(
+            chats = truth_followup_chats,
+            past_key_values = copy.deepcopy(truth_cache),
+        )
+        new_probe_truth_answer_info = get_choice_token_logits_from_token_ids(truth_forward['logits'], yesno_tokens)
 
 
+        lie_followup_chats = [
+            chat_wrapper.format_chat(
+                system_prompt=None,
+                user_message=probe_questions[pi],
+                prefiller='',
+            ) for pi in probe_index_batch
+        ]
+        lie_forward = chat_wrapper.forward(
+            chats = lie_followup_chats,
+            past_key_values = copy.deepcopy(lie_cache),
+        )
+        new_probe_lie_answer_info = get_choice_token_logits_from_token_ids(lie_forward['logits'], yesno_tokens)
 
-    
+        del truth_forward
+        del lie_forward
+        torch.cuda.empty_cache()
+
+
+        # Append results
+        num_probe_questions = new_probe_truth_answer_info.shape[0]
+        rows = []
+        for probe_idx_in_batch, probe_idx in enumerate(probe_index_batch):
+
+            prob_yes = new_probe_truth_answer_info[probe_idx_in_batch, 0].item()
+            prob_no = new_probe_truth_answer_info[probe_idx_in_batch, 1].item()
+            rows.append({
+                'question_idx': qai,
+                'truth': 1,
+                'probe_question_idx': probe_idx,
+                'prob_yes': prob_yes,
+                'prob_no': prob_no
+            })
+
+            prob_yes = new_probe_lie_answer_info[probe_idx_in_batch, 0].item()
+            prob_no = new_probe_lie_answer_info[probe_idx_in_batch, 1].item()
+            rows.append({
+                'question_idx': qai,
+                'truth': 0,
+                'probe_question_idx': probe_idx,
+                'prob_yes': prob_yes,
+                'prob_no': prob_no
+            })
+
+        probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
+        probe_results_df.to_csv(probe_response_path, index = False)
+
+
+
+        

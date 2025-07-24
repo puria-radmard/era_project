@@ -86,7 +86,7 @@ class ChatTemplateWrapper:
                 add_generation_prompt = False
         else:
             add_generation_prompt = False
-        
+   
 
         prompt = self.tokenizer.apply_chat_template(history, tokenize = False, add_generation_prompt=add_generation_prompt, continue_final_message = (prefiller is not None and prefiller != ""),)
 
@@ -94,6 +94,7 @@ class ChatTemplateWrapper:
         prompt = re.sub(r'\n\nCutting Knowledge Date: [A-Za-z]+\s+\d{4}\nToday Date: \d{1,2} [A-Za-z]{3} \d{4}', '', prompt)
         
         prompt = prompt.replace('<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n<|eot_id|>', '<|begin_of_text|>')
+        prompt = prompt.replace('[SYSTEM_PROMPT][/SYSTEM_PROMPT]', '')
 
         if system_prompt is None and not keep_bos:
             prompt = prompt.removeprefix('<|begin_of_text|>')
