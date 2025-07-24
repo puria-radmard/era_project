@@ -187,7 +187,7 @@ for iN, N in enumerate(context_lengths_desc):
     n_samples_eff = min(n_samples, math.perm(N, N))
 
     for context_type in context_types:
-        print(f"\nTesting context type: {context_type} - iterating over {N} samples")
+        print(f"\nTesting context type: {context_type} - iterating over {n_samples_eff} samples")
 
         residuals_per_N_per_context = np.zeros([num_questions, n_samples_eff, num_candidate_layers, residual_stream_size])
         

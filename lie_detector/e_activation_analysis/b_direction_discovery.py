@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from util.util import YamlConfig
+from lie_detector.e_activation_analysis.viz import plot_prompted_projections, reconstruct_projection_arrays
+from lie_detector.e_activation_analysis.viz import plot_prompted_control_projections, reconstruct_control_projection_arrays
 
 import sys, os
 
@@ -107,42 +109,13 @@ for layer in range(n_layers):
 np.save(os.path.join(save_base, 'prompted_projection_along_average_lie_vector.npy'), results)
 
 # Visualization
-fig, axes = plt.subplots(7, 5, figsize=(9, 12))  # Adjust grid size as needed
-axes = axes.flatten()
+truth_projections, lie_projections = reconstruct_projection_arrays(results)
+plot_prompted_projections(truth_projections, lie_projections, results, 
+                          os.path.join(save_base, 'projection_along_average_lie_vector.png'))
 
-for layer in range(n_layers):  # Show first 25 layers
-    ax = axes[layer]
-    
-    # Histogram both distributions
-    ax.hist(truth_projections[:, layer], alpha=0.5, label='Truth', bins=20)
-    ax.hist(lie_projections[:, layer], alpha=0.5, label='Lie', bins=20)
-    
-    ax.set_title(f'Layer {layer} (d={results[layer]["cohens_d"]:.2f})')
-    ax.legend()
-    ax.set_xlabel('Projection onto Lie Direction')
-    ax.set_ylabel('Frequency')
-
-plt.tight_layout()
-plt.savefig(os.path.join(save_base, 'projection_along_average_lie_vector.png'))
-
-# Visualization
-fig, axes = plt.subplots(7, 5, figsize=(9, 12))  # Adjust grid size as needed
-axes = axes.flatten()
-
-for layer in range(n_layers):  # Show first 25 layers
-    ax = axes[layer]
-    
-    # Histogram both distributions
-    ax.hist(truth_projections_control[:, 0, layer], alpha=0.5, label='Truth', bins=20)
-    ax.hist(lie_projections_control[:, 0, layer], alpha=0.5, label='Lie', bins=20)
-    
-    ax.set_title(f'Layer {layer} (d={results[layer]["cohens_d"]:.2f})')
-    ax.legend()
-    ax.set_xlabel('Projection onto example control direction')
-    ax.set_ylabel('Frequency')
-
-plt.tight_layout()
-plt.savefig(os.path.join(save_base, 'projection_along_control_vector.png'))
+truth_projections_control, lie_projections_control = reconstruct_control_projection_arrays(truth_acts, lie_acts, results)
+plot_prompted_control_projections(truth_projections_control, lie_projections_control, results,
+                                 os.path.join(save_base, 'projection_along_control_vector.png'))
 
 # Find layers with strongest separation
 effect_sizes = [results[layer]['cohens_d'] for layer in range(n_layers)]

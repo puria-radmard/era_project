@@ -9,10 +9,12 @@ question_instruction: "Answer with 30 words."
 probe_file_name: "probes_with_yn_unknowable_balanced"
 probe_response_type: "yn"
 prompt_idx: 11
-context_lengths: [0, 1, 2, 5, 10, 20, 30, 40]
+context_lengths: [0, 1, 2, 5, 10, 20] #, 30, 40]
 excluded_probe_types: []  # Already reduced!
 icl_sorting_key: effect_size
 context_lengths_activations: [0, 1, 2, 5, 10, 20, 30]
 samples_per_context_length_activations: 16
 limit_to_lying: false
 hidden_state_size: 5120
+
+histogram_layer: 18

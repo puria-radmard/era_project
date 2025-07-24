@@ -34,7 +34,7 @@ for path in glob.glob(pattern):
     suffix = '.npy'
     if filename.startswith(prefix) and filename.endswith(suffix):
         context_type = filename[len(prefix):-len(suffix)]
-        context_results[context_type] = np.load(path, allow_pickle=True)
+        context_results[context_type] = np.load(path, allow_pickle=True).item()
 
 prompted_activations_projections = np.load(prompted_activations_projections_path, allow_pickle=True).item()
 contextual_activations_projections = np.load(contextual_activations_projections_path, allow_pickle=True)
