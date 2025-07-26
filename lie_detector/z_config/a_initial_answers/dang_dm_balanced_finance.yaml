@@ -1,0 +1,10 @@
+batch_size: 4
+system_prompt: ""
+question_instruction: "Answer with 30 words."
+questions_data_name: "dangerous_advice_balanced"
+model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
+prompt_idx: 12
+
+num_initial_generation_samples: 32
+top_p: 0.9
+temperature: 0.6

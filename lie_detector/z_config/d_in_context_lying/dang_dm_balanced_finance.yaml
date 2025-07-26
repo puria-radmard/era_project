@@ -1,0 +1,15 @@
+system_prompt: null
+model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
+initial_answers_args_name: dang_dm_balanced_finance
+probe_responses_args_name: dang_dm_balanced_finance
+probe_analysis_args_name: dang_dm_balanced_finance
+questions_data_name: "dangerous_advice_balanced"
+question_instruction: "Answer with 30 words."
+probe_file_name: "probes_with_yn_unknowable_balanced"
+probe_response_type: "yn"
+prompt_idx: 12
+samples_per_context_length: 16
+context_lengths: [0, 1, 2, 5, 10, 20, 30]
+excluded_probe_types: []  # Already reduced!
+icl_sorting_key: effect_size
+num_initial_generation_samples: 32

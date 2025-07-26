@@ -5,6 +5,8 @@ import sys
 import os
 from scipy import stats
 from util.util import YamlConfig
+from lie_detector.e_activation_analysis.viz import plot_behavioral_context_effects, plot_activation_context_effects, plot_absolute_activation_context_effects
+from lie_detector.e_activation_analysis.viz import plot_differential_activation_context_effects
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -211,165 +213,133 @@ for i_N, N in enumerate(context_lengths_activations):
 
 
 # ==============================================
-# BEHAVIORAL VISUALIZATION
+# VISUALIZATION
 # ==============================================
 
-fig_beh, ax_beh = plt.subplots(1, 2, figsize=(15, 10))
+# Plot behavioral context effects
+plot_behavioral_context_effects(
+    context_lengths=context_lengths,
+    prob_diff_ttest_stats=prob_diff_ttest_stats,
+    prob_diff_mean_diff=prob_diff_mean_diff,
+    prob_diff_p_values=prob_diff_p_values,
+    more_pairs_to_compare=more_pairs_to_compare,
+    projection_results_path=projection_results_path
+)
 
-# Colors for different pairs
-colors = plt.cm.tab10(np.linspace(0, 1, len(more_pairs_to_compare)))
-
-for i_pair, (pair_context_1, pair_context_2) in enumerate(more_pairs_to_compare):
-    # Line style: first pair solid, others dotted
-    linestyle = '-' if i_pair == 0 else '--'
-    
-    # Plot ttest statistics
-    ax_beh[0].plot(context_lengths, prob_diff_ttest_stats[i_pair, :], 
-                color=colors[i_pair], linestyle=linestyle, marker='o', 
-                label=f'{pair_context_1} vs {pair_context_2}', linewidth=2, markersize=6)
-
-    # Plot mean diff
-    ax_beh[1].plot(context_lengths, prob_diff_mean_diff[i_pair, :], 
-                color=colors[i_pair], linestyle=linestyle, marker='o', 
-                label=f'{pair_context_1} vs {pair_context_2}', linewidth=2, markersize=6)
-    
-    # Add significance stars
-    for i_N, (N, p_val) in enumerate(zip(context_lengths, prob_diff_p_values[i_pair, :])):
-        if p_val < 0.05 / 3 and not np.isnan(p_val):
-            y_pos = prob_diff_ttest_stats[i_pair, i_N]
-            ax_beh[0].scatter(N, y_pos, marker='*', s=100, color=colors[i_pair], 
-                          edgecolors='black', linewidth=0.5, zorder=10)
-
-ax_beh[0].set_xlabel('Context Length (N)')
-ax_beh[0].set_ylabel('t-test Statistic')
-ax_beh[0].set_title('p(truth)\nt-test statistics across context lengths')
-ax_beh[1].legend()
-ax_beh[0].grid(True, alpha=0.3)
-
-ax_beh[1].set_xlabel('Context Length (N)')
-ax_beh[1].set_ylabel('Mean diff')
-ax_beh[1].set_title('p(truth)\nmean diff across context lengths')
-# ax_beh[1].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-ax_beh[1].grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.savefig(os.path.join(projection_results_path, 'context_effect_results.png'), dpi=300, bbox_inches='tight')
-plt.close()
+# Plot activation context effects
+plot_activation_context_effects(
+    context_lengths_activations=context_lengths_activations,
+    activations_ttest_stats=activations_ttest_stats,
+    activations_mean_diffs=activations_mean_diffs,
+    activations_p_values=activations_p_values,
+    control_activations_ttest_stats=control_activations_ttest_stats,
+    control_activations_mean_diffs=control_activations_mean_diffs,
+    pairs_to_compare=pairs_to_compare,
+    n_layers=n_layers,
+    projection_results_path=projection_results_path
+)
 
 # ==============================================
-# ACTIVATIONS VISUALIZATION
+# SINGLE LAYER ABSOLUTE PROJECTION PLOTS
 # ==============================================
 
-# NOTE: Your activations arrays need a layer dimension!
-# Current shape: [len(pairs_to_compare), len(context_lengths)]
-# Should be: [len(pairs_to_compare), len(context_lengths), n_layers]
-# For now, I'll assume you only have data from the last layer processed
+print("Creating single layer plots...")
 
-import matplotlib.gridspec as gridspec
+# Define your context type aliases
+context_type_aliases = {
+    'top_lie_shuffled_together': 'Deceptively misaligned answers in context',
+    'top_truth_shuffled_together': 'Aligned answers in context',
+    'top_questions_random_answers': 'Random yes/no answers in context',
+    # Add other context types as needed
+}
 
-fig_act = plt.figure(figsize=(20, 16))
-gs = gridspec.GridSpec(8, 8, figure=fig_act, wspace=0.15, hspace=0.3)
+# Plot for specific layers (e.g., layers 15, 20, 25, 31)
+layers_to_plot = [15, 20, 25, 31]
 
-# Create subplots with custom spacing - smaller gaps within pairs
-axes_act = []
-for row in range(8):
-    row_axes = []
-    for col_pair in range(4):  # 4 pairs of columns
-        # Left subplot of pair (t-stat)
-        ax_left = fig_act.add_subplot(gs[row, col_pair*2])
-        # Right subplot of pair (mean difference) 
-        ax_right = fig_act.add_subplot(gs[row, col_pair*2 + 1])
-        row_axes.extend([ax_left, ax_right])
-    axes_act.append(row_axes)
-
-axes_act = np.array(axes_act)
-
-# Reshape axes for easier indexing: [layer, stat_type] where stat_type 0=t-stat, 1=mean difference
-axes_act = axes_act.reshape(n_layers, 2)
-
-colors_act = plt.cm.tab10(np.linspace(0, 1, len(pairs_to_compare)))
-
-for layer in range(n_layers):
-    # Left subplot: t-test statistics
-    ax_tstat = axes_act[layer, 0]
-    # Right subplot: mean difference
-    ax_mean_diffs = axes_act[layer, 1]
+for layer_idx in layers_to_plot:
+    layer_contextual_data = {}
+    layer_control_data = {}
     
-    for i_pair, (pair_context_1, pair_context_2) in enumerate(pairs_to_compare):
-        # Line style: first pair solid, others dotted
-        linestyle = '-' if i_pair == 0 else '--'
-        color = colors_act[i_pair]
+    # Collect data across all context lengths for this layer
+    for context_type in context_type_aliases.keys():
+        layer_contextual_data[context_type] = []
+        layer_control_data[context_type] = []
         
-        # Plot t-statistics (left subplot)
-        ax_tstat.plot(context_lengths_activations, activations_ttest_stats[i_pair, :], 
-                     color=color, linestyle=linestyle, marker='o', 
-                     linewidth=1.5, markersize=4)
-        
-        # Plot mean difference (right subplot)
-        ax_mean_diffs.plot(context_lengths_activations, activations_mean_diffs[i_pair, :], 
-                      color=color, linestyle=linestyle, marker='o', 
-                      linewidth=1.5, markersize=4)
-        
-        # Add error bars for control data
-        # Control stats shape: [len(pairs_to_compare), len(context_lengths), num_control_directions]
-        control_tstat_mean = np.mean(control_activations_ttest_stats[i_pair, :, :], axis=1)
-        control_tstat_std = np.std(control_activations_ttest_stats[i_pair, :, :], axis=1)
-        control_mean_diffs_mean = np.mean(control_activations_mean_diffs[i_pair, :, :], axis=1)
-        control_mean_diffs_std = np.std(control_activations_mean_diffs[i_pair, :, :], axis=1)
-        
-        # Add control error bars (slightly offset x for visibility)
-        x_offset = (i_pair - len(pairs_to_compare)/2) * 0.05
-        x_positions = np.array(context_lengths_activations) + x_offset
-        
-        ax_tstat.errorbar(x_positions, control_tstat_mean, yerr=control_tstat_std,
-                         color=color, linestyle=':', alpha=0.6, capsize=2, 
-                         capthick=1, linewidth=1)
-        ax_mean_diffs.errorbar(x_positions, control_mean_diffs_mean, yerr=control_mean_diffs_std,
-                          color=color, linestyle=':', alpha=0.6, capsize=2, 
-                          capthick=1, linewidth=1)
-        
-        # Add significance stars to t-stat plot only
-        for i_N, (N, p_val) in enumerate(zip(context_lengths_activations, activations_p_values[i_pair, :])):
-            if p_val < 0.05 and not np.isnan(p_val):
-                y_pos = activations_ttest_stats[i_pair, i_N]
-                ax_tstat.scatter(N, y_pos, marker='*', s=50, color=color, 
-                               edgecolors='black', linewidth=0.3, zorder=10)
+        for entry in contextual_activations_projections:
+            if entry['context_type'] == context_type:
+                proj_mean = np.mean(entry['projections'][:, layer_idx])
+                control_proj_means = np.mean(entry['control_projections'][:, :, layer_idx], axis=1)
+                
+                layer_contextual_data[context_type].append(proj_mean)
+                layer_control_data[context_type].append(control_proj_means)
     
-    # Formatting
-    ax_tstat.set_title(f'Layer {layer}: T-statistics', fontsize=10)
-    ax_mean_diffs.set_title(f'Layer {layer}: Mean difference', fontsize=10)
-    
-    if layer == n_layers - 1:  # Bottom row
-        ax_tstat.set_xlabel('Context Length (N)')
-        ax_mean_diffs.set_xlabel('Context Length (N)')
-    
-    ax_tstat.grid(True, alpha=0.3)
-    ax_mean_diffs.grid(True, alpha=0.3)
-    
-    # Smaller font for tick labels
-    ax_tstat.tick_params(labelsize=8)
-    ax_mean_diffs.tick_params(labelsize=8)
+    plot_absolute_activation_context_effects(
+        layer_idx=layer_idx,
+        context_lengths_activations=context_lengths_activations,
+        contextual_activations_data=layer_contextual_data,
+        control_contextual_activations_data=layer_control_data,
+        context_type_aliases=context_type_aliases,
+        projection_results_path=projection_results_path
+    )
 
-# Add legend to the figure
-legend_elements = []
-for i_pair, (pair_context_1, pair_context_2) in enumerate(pairs_to_compare):
-    linestyle = '-' if i_pair == 0 else '--'
-    legend_elements.append(plt.Line2D([0], [0], color=colors_act[i_pair], 
-                                     linestyle=linestyle, linewidth=2,
-                                     label=f'{pair_context_1} vs {pair_context_2}'))
+# ==============================================
+# DIFFERENTIAL SINGLE LAYER PROJECTION PLOTS
+# ==============================================
 
-fig_act.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.02), 
-               ncol=len(pairs_to_compare), fontsize=10)
+print("Creating differential single layer plots...")
 
-plt.suptitle('Activation Context Effects Across Layers', fontsize=14, y=0.98)
-# plt.tight_layout()
-plt.subplots_adjust(bottom=0.08, top=0.94, hspace=0.3, wspace=0.15)
-plt.savefig(os.path.join(projection_results_path, 'activation_context_effects.png'), dpi=300, bbox_inches='tight')
-plt.close()
+# Plot differential effects for the same layers
+for layer_idx in layers_to_plot:
+    layer_contextual_data = {}
+    layer_control_data = {}
+    
+    # Initialize data structures
+    for context_type in context_type_aliases.keys():
+        layer_contextual_data[context_type] = []
+        layer_control_data[context_type] = []
+    
+    # Also include the control context type for the baseline
+    control_context_type = 'top_questions_random_answers'
+    if control_context_type not in layer_contextual_data:
+        layer_contextual_data[control_context_type] = []
+        layer_control_data[control_context_type] = []
+    
+    # Organize data by context length, keeping questions dimension
+    for length_idx, context_length in enumerate(context_lengths_activations):
+        all_context_types = list(context_type_aliases.keys()) + [control_context_type]
+        
+        for context_type in set(all_context_types):  # Remove duplicates
+            # Find entry for this context type and length
+            for entry in contextual_activations_projections:
+                if entry['context_type'] == context_type and entry['context_length'] == context_length:
+                    # Keep full questions dimension (don't take mean)
+                    test_projections = entry['projections'][:, layer_idx]  # [questions]
+                    control_projections = entry['control_projections'][:, :, layer_idx]  # [num_control_directions, questions]
+                    
+                    layer_contextual_data[context_type].append(test_projections)
+                    layer_control_data[context_type].append(control_projections)
+                    break
+    
+    # Convert to arrays
+    for context_type in layer_contextual_data.keys():
+        layer_contextual_data[context_type] = np.array(layer_contextual_data[context_type])  # [num_context_lengths, questions]
+        layer_control_data[context_type] = np.array(layer_control_data[context_type])  # [num_context_lengths, num_control_directions, questions]
+    
+    plot_differential_activation_context_effects(
+        layer_idx=layer_idx,
+        context_lengths_activations=context_lengths_activations,
+        contextual_activations_data=layer_contextual_data,
+        control_contextual_activations_data=layer_control_data,
+        control_context_type=control_context_type,
+        context_type_aliases=context_type_aliases,
+        projection_results_path=projection_results_path
+    )
 
 print(f"Figures saved to:")
 print(f"  - {os.path.join(projection_results_path, 'context_effect_results.png')}")
 print(f"  - {os.path.join(projection_results_path, 'activation_context_effects.png')}")
+print(f"  - Single layer plots: context_absolute_effect_results_layer_{{layer}}.png")
+print(f"  - Differential single layer plots: context_differential_effect_results_layer_{{layer}}.png")
 
 # IMPORTANT NOTE: Your activations data arrays need to be 3D to properly store layer information:
 # activations_mean_diffs should be shape [len(pairs_to_compare), len(context_lengths), n_layers]
@@ -377,4 +347,3 @@ print(f"  - {os.path.join(projection_results_path, 'activation_context_effects.p
 # activations_p_values should be shape [len(pairs_to_compare), len(context_lengths), n_layers]
 # control_activations_mean_diffs should be shape [len(pairs_to_compare), len(context_lengths), n_layers, num_control_directions]
 # control_activations_ttest_stats should be shape [len(pairs_to_compare), len(context_lengths), n_layers, num_control_directions]
-

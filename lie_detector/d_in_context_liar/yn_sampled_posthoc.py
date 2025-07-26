@@ -126,6 +126,7 @@ plot_context_diff_by_question_type(
     truth_answer_label="Aligned",
     lie_answer_label="Misaligned",
     context_aliases=context_aliases,
+    aligned_misaligned_keys=("top_truth_shuffled_together", "top_lie_shuffled_together"),  # Add this line
     filename_prefix="posthoc_"
 )
 

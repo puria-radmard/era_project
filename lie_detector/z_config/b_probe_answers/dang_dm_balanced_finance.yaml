@@ -1,0 +1,10 @@
+system_prompt: ""
+model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
+initial_answers_args_name: dang_dm_balanced_finance
+questions_data_name: "dangerous_advice_balanced"
+question_instruction: "Answer with 30 words."
+probe_file_name: "probes_with_yn_unknowable_balanced"
+probe_response_type: "yn"
+prompt_idx: 12
+limit_to_lying: false
+batch_size: 4
