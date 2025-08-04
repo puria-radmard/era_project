@@ -49,7 +49,6 @@ def prob_mode(data, mode1_means, mode1_stds, mode2_means, mode2_stds):
     
     return posterior
 
-
 def find_most_discriminated_question(probe_responses_df):
     """
     Find the question_idx that is most consistently discriminated across all probes.
@@ -142,9 +141,6 @@ def find_most_discriminated_question(probe_responses_df):
     
     return most_discriminated, question_scores, all_results
 
-
-
-
 def weighted_linear_regression(x, y, y_err, return_full=False):
     """
     Perform weighted linear regression y = a*x + b where weights = 1/y_err^2
@@ -290,7 +286,6 @@ def compute_correlation_stats(x, y, y_err):
         'intercept_err': intercept_err,
         'significance': get_significance_marker(p_value)
     }
-
 
 def compute_constraint_mae(unsteered_log_probs, steered_log_probs_truth, steered_log_probs_lie, 
                           p_truth_mixture, pipeline):
@@ -325,153 +320,3 @@ def compute_constraint_mae(unsteered_log_probs, steered_log_probs_truth, steered
     
     return mae_values[valid_mask]
 
-import numpy as np
-from scipy import stats
-from scipy.optimize import minimize
-import matplotlib.pyplot as plt
-
-def weighted_linear_regression(x, y, y_err, return_full=False):
-    """
-    Perform weighted linear regression y = a*x + b where weights = 1/y_err^2
-    
-    Args:
-        x: Independent variable
-        y: Dependent variable  
-        y_err: Standard errors on y (used as weights)
-        return_full: If True, return additional statistics
-        
-    Returns:
-        slope, intercept, [correlation, p_value, slope_err, intercept_err] if return_full
-    """
-    # Remove NaN/inf values
-    valid_mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(y_err) & (y_err > 0)
-    x_clean = x[valid_mask]
-    y_clean = y[valid_mask]
-    y_err_clean = y_err[valid_mask]
-    
-    if len(x_clean) < 3:  # Need at least 3 points for meaningful regression
-        if return_full:
-            return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
-        else:
-            return np.nan, np.nan
-    
-    # Weights are inverse variance
-    weights = 1.0 / (y_err_clean ** 2)
-    
-    # Weighted least squares solution
-    W = np.sum(weights)
-    Wx = np.sum(weights * x_clean)
-    Wy = np.sum(weights * y_clean)
-    Wxx = np.sum(weights * x_clean * x_clean)
-    Wxy = np.sum(weights * x_clean * y_clean)
-    
-    # Calculate slope and intercept
-    Delta = W * Wxx - Wx * Wx
-    slope = (W * Wxy - Wx * Wy) / Delta
-    intercept = (Wxx * Wy - Wx * Wxy) / Delta
-    
-    if not return_full:
-        return slope, intercept
-    
-    # Calculate uncertainties
-    slope_err = np.sqrt(W / Delta)
-    intercept_err = np.sqrt(Wxx / Delta)
-    
-    # Calculate weighted correlation coefficient
-    y_pred = slope * x_clean + intercept
-    ss_res = np.sum(weights * (y_clean - y_pred) ** 2)
-    y_mean_weighted = Wy / W
-    ss_tot = np.sum(weights * (y_clean - y_mean_weighted) ** 2)
-    
-    r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
-    correlation = np.sqrt(max(0, r_squared)) * np.sign(slope)
-    
-    # Calculate p-value using t-test on slope
-    t_stat = slope / slope_err if slope_err > 0 else 0
-    dof = len(x_clean) - 2
-    p_value = 2 * (1 - stats.t.cdf(abs(t_stat), dof)) if dof > 0 else 1.0
-    
-    return slope, intercept, correlation, p_value, slope_err, intercept_err
-
-def plot_regression_with_stats(ax, x, y, y_err, color, label, x_range=None):
-    """
-    Plot data with error bars and regression line, add stats text to plot
-    
-    Args:
-        ax: Matplotlib axis
-        x, y, y_err: Data and error bars
-        color: Color for plotting
-        label: Label for legend
-        x_range: Range for plotting regression line (if None, use data range)
-    """
-    # Plot data with error bars
-    valid_mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(y_err)
-    if not np.any(valid_mask):
-        return
-        
-    ax.errorbar(x[valid_mask], y[valid_mask], yerr=y_err[valid_mask], 
-               fmt='o', color=color, alpha=0.7, label=label, markersize=4)
-    
-    # Perform regression
-    slope, intercept, correlation, p_value, slope_err, intercept_err = weighted_linear_regression(
-        x, y, y_err, return_full=True
-    )
-    
-    if not np.isfinite(slope):
-        return
-    
-    # Plot regression line
-    if x_range is None:
-        x_range = [np.nanmin(x[valid_mask]), np.nanmax(x[valid_mask])]
-    
-    x_line = np.linspace(x_range[0], x_range[1], 100)
-    y_line = slope * x_line + intercept
-    ax.plot(x_line, y_line, '--', color=color, alpha=0.8, linewidth=2)
-    
-    # Add statistics text
-    significance_marker = get_significance_marker(p_value)
-    stats_text = f'{label}: r={correlation:.3f}{significance_marker}'
-    
-    # Position text in upper left or lower right depending on slope
-    text_x = 0.05 if slope >= 0 else 0.95
-    text_y = 0.95 if slope >= 0 else 0.05
-    ha = 'left' if slope >= 0 else 'right'
-    va = 'top' if slope >= 0 else 'bottom'
-    
-    ax.text(text_x, text_y, stats_text, transform=ax.transAxes, 
-           color=color, fontsize=10, fontweight='bold', ha=ha, va=va,
-           bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
-
-def get_significance_marker(p_value):
-    """Convert p-value to significance markers"""
-    if p_value < 0.001:
-        return '***'
-    elif p_value < 0.01:
-        return '**'
-    elif p_value < 0.05:
-        return '*'
-    elif p_value < 0.1:
-        return '†'
-    else:
-        return ''
-
-def compute_correlation_stats(x, y, y_err):
-    """
-    Compute correlation statistics with error bars
-    
-    Returns:
-        dict with correlation, p_value, slope, intercept, and their errors
-    """
-    slope, intercept, correlation, p_value, slope_err, intercept_err = weighted_linear_regression(
-        x, y, y_err, return_full=True
-    )
-    
-    return {
-        'correlation': correlation,
-        'p_value': p_value,
-        'slope': slope,
-        'slope_err': slope_err,
-        'intercept': intercept,
-        'intercept_err': intercept_err,
-        'significance': get_significance_marker(p_value)
-    }

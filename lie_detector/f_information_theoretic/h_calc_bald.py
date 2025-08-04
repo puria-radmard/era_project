@@ -85,28 +85,12 @@ print(f"  Projections: {all_results['truth_projections_no_steering'].shape}")
 
 # Step 1: Fit Gaussians to projections for each layer (same as before)
 print("Fitting Gaussians to projections...")
-truth_means = np.zeros(num_layers)
-truth_stds = np.zeros(num_layers)
-lie_means = np.zeros(num_layers)
-lie_stds = np.zeros(num_layers)
+truth_means = all_results['truth_projections_no_steering'].mean(0)
+truth_stds = all_results['truth_projections_no_steering'].std(0)
+lie_means = all_results['lie_projections_no_steering'].mean(0)
+lie_stds = all_results['lie_projections_no_steering'].std(0)
 
-for layer_idx in range(num_layers):
-    # Collect all valid projections for this layer
-    truth_projections_layer = all_results['truth_projections_no_steering'][:, :, layer_idx, :].flatten()
-    lie_projections_layer = all_results['lie_projections_no_steering'][:, :, layer_idx, :].flatten()
-    
-    # Remove NaNs
-    truth_projections_valid = truth_projections_layer[~np.isnan(truth_projections_layer)]
-    lie_projections_valid = lie_projections_layer[~np.isnan(lie_projections_layer)]
-    
-    # Fit Gaussians (moment matching)
-    truth_means[layer_idx] = np.mean(truth_projections_valid)
-    truth_stds[layer_idx] = np.std(truth_projections_valid)
-    lie_means[layer_idx] = np.mean(lie_projections_valid)
-    lie_stds[layer_idx] = np.std(lie_projections_valid)
-    
-    print(f"  Layer {layer_idx}: Truth μ={truth_means[layer_idx]:.3f}, σ={truth_stds[layer_idx]:.3f}")
-    print(f"  Layer {layer_idx}: Lie μ={lie_means[layer_idx]:.3f}, σ={lie_stds[layer_idx]:.3f}")
+
 
 # Step 2: Create multiplier index mapping
 def get_multiplier_indices(magnitude):
@@ -116,7 +100,7 @@ def get_multiplier_indices(magnitude):
     return neg_idx, pos_idx
 
 # Step 3: Run pipelines for each magnitude and temperature
-temperatures = [1, 2, 3, 4, 5]
+temperatures = [1, 3, 5, 7]
 
 # Initialize results array: [magnitude, temperature, pipeline, probe_question, statistic]
 # statistic: 0=mean, 1=std
@@ -151,8 +135,6 @@ for mag_idx, magnitude in enumerate(unique_magnitudes):
             for q_idx in tqdm(range(num_questions), desc=f"Questions ({pipeline}, temp={temp}, mag={magnitude})"):
                 for probe_idx in range(num_probe_questions):
                     probe_length = probe_lengths[probe_idx]
-                    if probe_length <= 1:  # Skip probes with no tokens to predict
-                        continue
                     
                     A_t_values = []
                     
@@ -166,26 +148,27 @@ for mag_idx, magnitude in enumerate(unique_magnitudes):
                         
                         # Skip if any required data is NaN
                         if np.isnan(first_term) or np.any(np.isnan(context_projections)):
-                            continue
+                            raise Exception
                         
                         # Compute p(z | x_{<t}) for each layer
                         context_projections_reshaped = context_projections.reshape(1, -1)  # [1, layers]
                         
                         # Get posterior probabilities for truth mode
+                        # i.e. p(z = true teller | prev tokens) for each layer
                         posterior_probs = prob_mode(
                             context_projections_reshaped,
-                            truth_means, truth_stds,
-                            lie_means, lie_stds
-                        )  # Shape: [1, layers]
-                        
-                        # Sigmoid p(z = true teller | prev tokens) for each layer
-                        p_truth_layers = posterior_probs[0]  # Shape: [layers]
+                            truth_means[probe_idx, :, token_pos], truth_stds[probe_idx, :, token_pos],
+                            lie_means[probe_idx, :, token_pos], lie_stds[probe_idx, :, token_pos]
+                        )[0]  # Shape: [1, layers] --> [layers]
                         
                         # Take geometric mean across layers
-                        # p_truth = np.power(np.prod(p_truth_layers), 1.0 / num_layers)
+                        # p_truth = np.power(np.prod(posterior_probs), 1.0 / num_layers)
 
-                        # Take the most extreme value
-                        p_truth = p_truth_layers.max() if pipeline == 'truth' else p_truth_layers.min()
+                        # Just take the flat average for now...
+                        # p_truth = 0.1 if pipeline == 'lie' else 0.9
+
+                        # Take the least extreme value
+                        p_truth = posterior_probs.min() if pipeline == 'truth' else posterior_probs.max()
                         
                         # Apply temperature
                         if temp == np.inf:
@@ -273,37 +256,37 @@ for mag_idx, magnitude in enumerate(unique_magnitudes):
         ax = axes[mag_idx, temp_idx]
         
         # Get data for this magnitude and temperature
-        truth_means = results_array[mag_idx, temp_idx, 0, :, 0]  # pipeline=0 (truth), statistic=0 (mean)
-        truth_stds = results_array[mag_idx, temp_idx, 0, :, 1]   # pipeline=0 (truth), statistic=1 (std)
-        lie_means = results_array[mag_idx, temp_idx, 1, :, 0]    # pipeline=1 (lie), statistic=0 (mean)
-        lie_stds = results_array[mag_idx, temp_idx, 1, :, 1]     # pipeline=1 (lie), statistic=1 (std)
+        truth_snr_means = results_array[mag_idx, temp_idx, 0, :, 0]  # pipeline=0 (truth), statistic=0 (mean)
+        truth_snr_stds = results_array[mag_idx, temp_idx, 0, :, 1]   # pipeline=0 (truth), statistic=1 (std)
+        lie_snr_means = results_array[mag_idx, temp_idx, 1, :, 0]    # pipeline=1 (lie), statistic=0 (mean)
+        lie_snr_stds = results_array[mag_idx, temp_idx, 1, :, 1]     # pipeline=1 (lie), statistic=1 (std)
         
         # Determine x-axis range for regression lines
         x_min, x_max = np.nanmin(reference_snrs), np.nanmax(reference_snrs)
         x_range = [x_min - 0.1 * (x_max - x_min), x_max + 0.1 * (x_max - x_min)]
         
         # Plot truth pipeline with regression (blue)
-        valid_mask_truth = ~(np.isnan(truth_means) | np.isnan(truth_stds))
+        valid_mask_truth = ~(np.isnan(truth_snr_means) | np.isnan(truth_snr_stds))
         if np.sum(valid_mask_truth) > 2:  # Need at least 3 points for regression
-            plot_regression_with_stats(ax, reference_snrs, truth_means, truth_stds, 
+            plot_regression_with_stats(ax, reference_snrs, truth_snr_means, truth_snr_stds, 
                                      'blue', 'Truth', x_range)
             
             # Store correlation stats
             truth_stats = compute_correlation_stats(reference_snrs[valid_mask_truth], 
-                                                   truth_means[valid_mask_truth], 
-                                                   truth_stds[valid_mask_truth])
+                                                   truth_snr_means[valid_mask_truth], 
+                                                   truth_snr_stds[valid_mask_truth])
             correlation_stats[f'mag_{magnitude}_temp_{temp}_truth'] = truth_stats
         
         # Plot lie pipeline with regression (red)
-        valid_mask_lie = ~(np.isnan(lie_means) | np.isnan(lie_stds))
+        valid_mask_lie = ~(np.isnan(lie_snr_means) | np.isnan(lie_snr_stds))
         if np.sum(valid_mask_lie) > 2:  # Need at least 3 points for regression
-            plot_regression_with_stats(ax, reference_snrs, lie_means, lie_stds, 
+            plot_regression_with_stats(ax, reference_snrs, lie_snr_means, lie_snr_stds, 
                                      'red', 'Lie', x_range)
             
             # Store correlation stats
             lie_stats = compute_correlation_stats(reference_snrs[valid_mask_lie], 
-                                                lie_means[valid_mask_lie], 
-                                                lie_stds[valid_mask_lie])
+                                                lie_snr_means[valid_mask_lie], 
+                                                lie_snr_stds[valid_mask_lie])
             correlation_stats[f'mag_{magnitude}_temp_{temp}_lie'] = lie_stats
         
         ax.set_xlabel('Reference SNR', fontsize=12)

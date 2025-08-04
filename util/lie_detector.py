@@ -588,8 +588,8 @@ def plot_probe_type_analysis(data: pd.DataFrame, filepath: str, x_key: str, clas
     
     # Adjust layout
     plt.tight_layout()
-    plt.savefig(filepath, dpi=300, bbox_inches='tight')
-    plt.show()
+    if filepath:
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
     
     # Print significance results
     print("\nStatistical significance results:")
