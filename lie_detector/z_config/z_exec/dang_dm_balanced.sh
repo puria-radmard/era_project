@@ -12,5 +12,18 @@
 ################################################################################
 
 
-python lie_detector/d_in_context_liar/yn_sampled_posthoc.py lie_detector/z_config/d_in_context_lying/dang_dm_balanced.yaml
-python lie_detector/e_activation_analysis/b_direction_discovery_posthoc.py lie_detector/z_config/e_activation_analysis/dang_dm_balanced.yaml
+#python lie_detector/d_in_context_liar/yn_sampled_posthoc.py lie_detector/z_config/d_in_context_lying/dang_dm_balanced.yaml
+#python lie_detector/e_activation_analysis/b_direction_discovery_posthoc.py lie_detector/z_config/e_activation_analysis/dang_dm_balanced.yaml
+
+################################################################################
+
+
+python lie_detector/f_information_theoretic/a_post_answer_prompted.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+python lie_detector/f_information_theoretic/b_histogram_before_and_after_answer.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+python lie_detector/f_information_theoretic/c_track_over_probe_answer.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+python lie_detector/f_information_theoretic/d_disc_over_probe_answer.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+python lie_detector/f_information_theoretic/e_clamped_generation.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+python lie_detector/f_information_theoretic/f_clamped_yn_sampled.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+python lie_detector/f_information_theoretic/g_gathering_bald_info.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+python lie_detector/f_information_theoretic/h_calc_bald.py lie_detector/z_config/f_information_theoretic/dang_dm_balanced.yaml
+

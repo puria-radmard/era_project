@@ -480,24 +480,19 @@ def add_significance_stars(ax, data, probe_info, discriminability_results, x_key
 
 def create_probe_boxplot(data: pd.DataFrame, x_key: str, class_key: str):
     """Create the main boxplot with stripplot overlay."""
-    import seaborn as sns
-    import matplotlib.pyplot as plt
     
     # Create box plot for each probe question
-    ax = sns.boxplot(data=data, x='probe_question_idx', y=x_key, hue=class_key)
+    ax = sns.boxplot(data=data, x='probe_question_idx', y=x_key, hue=class_key, width = 0.5, palette=['red', 'blue'])
     
     # Add scatter points overlaid on boxplots
-    sns.stripplot(data=data, x='probe_question_idx', y=x_key, hue=class_key, 
-                  dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
+    # sns.stripplot(data=data, x='probe_question_idx', y=x_key, hue=class_key, 
+    #               dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
     
     return ax
 
 
 def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_results: Dict, x_key: str, class_key: str):
     """Create second subplot with probes ordered by discriminability, centered at 0."""
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-    import pandas as pd
     
     # Get probe info
     probe_info = data[['probe_question_idx', 'probe', 'probe_type']].drop_duplicates().sort_values('probe_question_idx')
@@ -541,7 +536,7 @@ def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_re
     transformed_df = pd.DataFrame(transformed_data)
     
     # Create the plot
-    ax = sns.boxplot(data=transformed_df, x='ordered_probe_idx', y=f'delta_{x_key}', hue=class_key)
+    ax = sns.boxplot(data=transformed_df, x='ordered_probe_idx', y=f'delta_{x_key}', hue=class_key, width = 0.5, palette=['red', 'blue'])
     sns.stripplot(data=transformed_df, x='ordered_probe_idx', y=f'delta_{x_key}', hue=class_key, 
                   dodge=True, size=3, alpha=0.6, marker='x', ax=ax)
     
@@ -551,9 +546,8 @@ def create_discriminability_ordered_plot(data: pd.DataFrame, discriminability_re
     return ax
 
 
-def plot_probe_type_analysis(data: pd.DataFrame, filepath: str, x_key: str, class_key: str) -> Dict:
+def plot_probe_type_analysis(data: pd.DataFrame, filepath: str, x_key: str, class_key: str, enable_category_braces: bool = False) -> Dict:
     """Plot log odds distributions by probe question with statistical significance."""
-    import matplotlib.pyplot as plt
     
     # Get unique probe questions and their info
     probe_info = data[['probe_question_idx', 'probe', 'probe_type']].drop_duplicates().sort_values('probe_question_idx')
@@ -562,34 +556,35 @@ def plot_probe_type_analysis(data: pd.DataFrame, filepath: str, x_key: str, clas
     discriminability_results = compute_probe_discriminability(data, x_key, class_key)
     
     # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(max(12, len(probe_info) * 1.5), 16))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(max(8, len(probe_info)), 15))
     
     # First subplot: Original probe order
     plt.sca(ax1)
     ax1 = create_probe_boxplot(data, x_key, class_key)
     add_significance_stars(ax1, data, probe_info, discriminability_results, x_key)
-    add_category_braces(ax1, probe_info)
+    if enable_category_braces:
+        add_category_braces(ax1, probe_info)
     
-    ax1.set_title('Log Odds Distribution by Probe Question\n(* indicates p<0.05 for paired t-test)')
-    ax1.set_xlabel('Probe Question Index')
-    ax1.set_ylabel('Log Odds')
+    ax1.set_title('Log Odds Distribution by Probe Question (* indicates p<0.05 for paired t-test)', fontsize = 25)
+    ax1.set_xlabel('Probe Question Index', fontsize = 25)
+    ax1.set_ylabel('Log Odds', fontsize = 25)
     ax1.tick_params(axis='x', rotation=45)
     
     # Handle legend to avoid duplicates from stripplot
     handles, labels = ax1.get_legend_handles_labels()
-    ax1.legend(handles[:2], ['False', 'True'], title=class_key.title())
+    ax1.legend(handles[:2], ['Misaligned', 'Aligned'], fontsize = 25)#, title=class_key.title())
     
     # Second subplot: Ordered by discriminability, centered at 0
     plt.sca(ax2)
     ax2 = create_discriminability_ordered_plot(data, discriminability_results, x_key, class_key)
     
-    ax2.set_title('Probe Questions Ordered by Discriminability (Δ from probe mean)\nLeast discriminable (left) → Most discriminable (right)')
-    ax2.set_xlabel('Probe Index (ordered by discriminability)')
-    ax2.set_ylabel('Δ Log Odds (centered at probe mean)')
+    # ax2.set_title('Probe Questions Ordered by Discriminability (Δ from probe mean)\nLeast discriminable (left) → Most discriminable (right)')
+    ax2.set_xlabel('Probe Index (ordered by discriminability)', fontsize = 25)
+    ax2.set_ylabel('Δ Log Odds (centered at probe mean)', fontsize = 25)
     
     # Handle legend for second plot
     handles, labels = ax2.get_legend_handles_labels()
-    ax2.legend(handles[:2], ['False', 'True'], title=class_key.title())
+    ax2.legend(handles[:2], ['Misaligned', 'Aligned'], fontsize = 25)#, title=class_key.title())
     
     # Adjust layout
     plt.tight_layout()

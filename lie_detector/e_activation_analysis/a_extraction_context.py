@@ -30,6 +30,8 @@ probe_analysis_args_name = args.probe_analysis_args_name
 
 hidden_state_size = args.hidden_state_size
 
+num_layers = args.num_layers
+
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
 
@@ -161,7 +163,7 @@ trainable_questions_idxs = trainable_answers['question_idx']
 
 assert len(trainable_questions_idxs) == len(valid_qa_pairs)
 
-candidate_layers = list(range(32))
+candidate_layers = candidate_layers = list(range(num_layers))
 
 num_context_lengths = len(context_lengths)
 num_candidate_layers = len(candidate_layers)

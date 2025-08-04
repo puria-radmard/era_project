@@ -256,7 +256,7 @@ def plot_behavioral_context_effects(context_lengths, prob_diff_ttest_stats, prob
     fig_beh, ax_beh = plt.subplots(1, 2, figsize=(15, 10))
 
     # Colors for different pairs
-    colors = plt.cm.tab10(np.linspace(0, 1, len(more_pairs_to_compare)))
+    colors = plt.cm.RdBu(np.linspace(0, 1, len(more_pairs_to_compare)))
 
     for i_pair, (pair_context_1, pair_context_2) in enumerate(more_pairs_to_compare):
         # Line style: first pair solid, others dotted
@@ -332,7 +332,7 @@ def plot_activation_context_effects(context_lengths_activations, activations_tte
     # Reshape axes for easier indexing: [layer, stat_type] where stat_type 0=t-stat, 1=mean difference
     axes_act = axes_act.reshape(n_layers, 2)
 
-    colors_act = plt.cm.tab10(np.linspace(0, 1, len(pairs_to_compare)))
+    colors_act = plt.cm.RdBu(np.linspace(0, 1, len(pairs_to_compare)))
 
     for layer in range(n_layers):
         # Left subplot: t-test statistics
@@ -432,7 +432,7 @@ def plot_absolute_activation_context_effects(layer_idx, context_lengths_activati
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
     # Colors for different context types
-    colors = plt.cm.tab10(np.linspace(0, 1, len(context_type_aliases)))
+    colors = plt.cm.RdBu(np.linspace(0, 1, len(context_type_aliases)))
 
     for i, (context_type, alias) in enumerate(context_type_aliases.items()):
         color = colors[i]
@@ -498,7 +498,7 @@ def plot_differential_activation_context_effects(layer_idx, context_lengths_acti
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
     # Colors for different context types
-    colors = plt.cm.tab10(np.linspace(0, 1, len(plot_context_types)))
+    colors = plt.cm.RdBu(np.linspace(0, 1, len(plot_context_types)))
 
     control_display_name = context_type_aliases.get(control_context_type, control_context_type.replace("_", " ").title())
     

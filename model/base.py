@@ -198,7 +198,7 @@ class ChatTemplateWrapper:
             return_dict_in_generate=True,
             **kwargs
         )
-
+        
         input_length = inputs.input_ids.shape[1]
         
         generated_sequences = outputs.sequences
@@ -206,13 +206,18 @@ class ChatTemplateWrapper:
         generated_texts = [self.tokenizer.decode(generated_sequence[input_length:], skip_special_tokens=True) for generated_sequence in generated_sequences]
         generated_full_texts = [self.tokenizer.decode(generated_sequence, skip_special_tokens=True) for generated_sequence in generated_sequences]
 
-        return {
+        ret = {
             "sequences": generated_sequences,
             "generated_full_texts": generated_full_texts,
             "generated_texts": generated_texts,
-            "input_length": input_length
+            "input_length": input_length,
+            **outputs
         }
+        
+        if kwargs.get('output_hidden_states'):
+            ret['generated_hidden_states'] = [torch.concat([hs[i] for hs in outputs['hidden_states'][1:]], 1) for i in range(len(outputs['hidden_states'][0]))]
 
+        return ret
     
     @torch.no_grad()
     def generate(

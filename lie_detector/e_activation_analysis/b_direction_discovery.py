@@ -18,6 +18,8 @@ system_prompt = args.system_prompt
 questions_data_name = args.questions_data_name
 model_name = args.model_name
 
+num_layers = args.num_layers
+
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
 
@@ -37,7 +39,7 @@ all_truth_residual = torch.load(os.path.join(prompted_results_path, 'all_truth_r
 all_lie_residual = torch.load(os.path.join(prompted_results_path, 'all_lie_residual_with_question.pt'))
 
 # For labelling
-candidate_layers = list(range(32))
+candidate_layers = list(range(num_layers))
 
 # Convert to numpy for easier manipulation
 truth_acts = all_truth_residual.numpy()  # [questions, layers, neurons]
@@ -134,7 +136,7 @@ print(f"Effect sizes: {[effect_sizes[i] for i in best_layers]}")
 context_types = [
     'top_lie_shuffled_together',      # 1. Top questions + lie answers, shuffled together
     'top_truth_shuffled_together',    # 2. Top questions + truth answers, shuffled together 
-    'top_questions_random_answers',     # 5alt. Top questions + 50/50 random answers
+    'top_questions_random_answers',   # 5alt. Top questions + 50/50 random answers
 ]
 
 context_lengths = args.context_lengths_activations

@@ -363,11 +363,11 @@ def plot_context_diff_by_question_type(all_results, context_types, control_conte
                     snr_data[question_type]['snr_values'].append(snr)
     
     # Generate main difference plot
-    fig, axes = plt.subplots(num_initial_question_types, 1, figsize=(14, 5*num_initial_question_types))
+    fig, axes = plt.subplots(num_initial_question_types, 1, figsize=(10, 4*num_initial_question_types))
     if num_initial_question_types == 1:
         axes = [axes]
 
-    colors = plt.cm.tab10(np.linspace(0, 1, len(plot_context_types)))
+    colors = plt.cm.RdBu(np.linspace(0, 1, len(plot_context_types)))
 
     for type_idx, question_type in enumerate(question_types):
         for i, context_type in enumerate(plot_context_types):
@@ -400,15 +400,15 @@ def plot_context_diff_by_question_type(all_results, context_types, control_conte
         # Add horizontal line at y=0 for reference
         axes[type_idx].axhline(y=0, color='black', linestyle='--', alpha=0.5, linewidth=1)
         
-        axes[type_idx].set_xlabel('Context Length (N)')
-        axes[type_idx].set_ylabel(f'Difference in Log P({truth_answer_label}) - Log P({lie_answer_label})')
-        axes[type_idx].set_title(f'{question_type} Questions')
-        axes[type_idx].legend()
+        axes[type_idx].set_title(f'{question_type} Questions', fontsize = 15)
         axes[type_idx].grid(True, alpha=0.3)
 
     control_display_name = context_aliases.get(control_context_type, control_context_type.replace("_", " ").title())
-    plt.suptitle(f'Context Effect Differences by Question Type Relative to {control_display_name}')
-    plt.tight_layout()
+    fig.text(0.0, 0.5, f'Difference in Log P({truth_answer_label}) - Log P({lie_answer_label})\nrelative to {control_display_name}', fontsize = 15, ha='center',va='center', rotation='vertical')
+    axes[-1].set_xlabel('Context Length (N)', fontsize = 15)
+    axes[-1].legend(fontsize = 15)
+
+    # plt.tight_layout()
     filename = f'{filename_prefix}context_diff_by_question_type.png'
     plt.savefig(os.path.join(output_path, filename), dpi=300, bbox_inches='tight')
     plt.close()
@@ -425,7 +425,6 @@ def plot_context_diff_by_question_type(all_results, context_types, control_conte
             
             axes_snr.set_xlabel('Context Length (N)')
             axes_snr.set_ylabel('SNR (Paired Cohen\'s d)')
-            axes_snr.set_title(f'{question_type} Questions')
             axes_snr.grid(True, alpha=0.3)
         
         aligned_display = context_aliases.get(aligned_key, aligned_key.replace("_", " ").title())

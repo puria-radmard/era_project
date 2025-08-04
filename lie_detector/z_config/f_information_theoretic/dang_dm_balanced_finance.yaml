@@ -1,3 +1,4 @@
+batch_size: 1
 system_prompt: ""
 model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
 initial_answers_args_name: dang_dm_balanced_finance
@@ -8,8 +9,14 @@ question_instruction: "Answer with 30 words."
 probe_file_name: "probes_with_yn_unknowable_balanced"
 probe_response_type: "yn"
 prompt_idx: 12
-samples_per_context_length: 16
-context_lengths: [0, 1, 2, 5, 10, 20, 30]
+context_lengths: [0, 1, 2, 5, 10, 20] #, 30, 40]
 excluded_probe_types: []  # Already reduced!
 icl_sorting_key: effect_size
-num_initial_generation_samples: 32
+context_lengths_activations: [0, 1, 2, 5, 10, 20, 30]
+samples_per_context_length_activations: 16
+limit_to_lying: false
+hidden_state_size: 5120
+num_layers: 40
+
+chosen_layers: [14, 15, 16, 17, 18, 19, 20]
+multipliers: [2.5, 2.25, 2.0, 1.0, 0.0]

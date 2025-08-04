@@ -123,7 +123,7 @@ for qai in tqdm(trainable_questions_idxs):
 
         truth_followup_chats = [
             chat_wrapper.format_chat(
-                system_prompt=None,
+                system_prompt="",
                 user_message=probe_questions[pi],
                 prefiller='',
             ) for pi in probe_index_batch
@@ -137,7 +137,7 @@ for qai in tqdm(trainable_questions_idxs):
 
         lie_followup_chats = [
             chat_wrapper.format_chat(
-                system_prompt=None,
+                system_prompt="",
                 user_message=probe_questions[pi],
                 prefiller='',
             ) for pi in probe_index_batch

@@ -19,6 +19,8 @@ model_name = args.model_name
 probe_file_name = args.probe_file_name
 probe_response_type = args.probe_response_type
 
+num_layers = args.num_layers
+
 prompt_index = args.prompt_idx
 
 # Save directory should already be made
@@ -35,7 +37,7 @@ all_truth_residual = torch.load(os.path.join(prompted_results_path, 'all_truth_r
 all_lie_residual = torch.load(os.path.join(prompted_results_path, 'all_lie_residual_with_question.pt'))
 
 # For labelling
-candidate_layers = list(range(32))
+candidate_layers = candidate_layers = list(range(num_layers))
 
 # Convert to numpy for easier manipulation
 truth_acts = all_truth_residual.numpy()  # [questions, layers, neurons]

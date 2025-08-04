@@ -26,7 +26,7 @@ limit_to_lying = args.limit_to_lying
 
 prompt_index = args.prompt_idx
 
-save_base = os.path.join('lie_detector_results/e_activation_analysis', args.args_name, 'prompted')
+save_base = os.path.join('lie_detector_results/f_information_theoretic', args.args_name, 'prompted')
 os.makedirs(save_base, exist_ok=True)
 args.save(save_base)
 
@@ -70,10 +70,14 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
 
     question = initial_questions_df['question'][qai].strip()
 
+    response_row = trainable_answers[trainable_answers['question_idx'] == qai]
+    truth_answer = response_row.truth_answer.item()
+    lie_answer = response_row.lie_answer.item()
+
     truth_chat = chat_wrapper.format_chat(
         system_prompt=system_prompt,
-        user_message=f'{truth_prompt} {question} {question_instruction}',
-        prefiller = ''
+        in_context_questions=[f'{truth_prompt} {question} {question_instruction}'],
+        in_context_answers=[truth_answer],
     )
     truth_outputs = chat_wrapper.forward(
         chats = [truth_chat],
@@ -82,8 +86,8 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
 
     lie_chat = chat_wrapper.format_chat(
         system_prompt=system_prompt,
-        user_message=f'{lie_prompt} {question} {question_instruction}',
-        prefiller = ''
+        in_context_questions=[f'{lie_prompt} {question} {question_instruction}'],
+        in_context_answers=[lie_answer],
     )
     lie_outputs = chat_wrapper.forward(
         chats = [lie_chat],
@@ -96,5 +100,5 @@ for i, qai in tqdm(enumerate(trainable_questions_idxs), total = len(trainable_qu
         all_lie_residual[i,cli,:] = lie_outputs.hidden_states[layer_idx + 1][0,-1,:]
 
 
-torch.save(all_truth_residual, os.path.join(save_base, 'all_truth_residual_with_question.pt'))
-torch.save(all_lie_residual, os.path.join(save_base, 'all_lie_residual_with_question.pt'))
+torch.save(all_truth_residual, os.path.join(save_base, 'all_truth_residual_with_initial_answer.pt'))
+torch.save(all_lie_residual, os.path.join(save_base, 'all_lie_residual_with_initial_answer.pt'))
