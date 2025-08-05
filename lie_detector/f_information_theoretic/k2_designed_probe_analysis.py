@@ -53,7 +53,7 @@ if __name__ == "__main__":
         json.dump(discriminability_results, f)
     
     # Scatter against predicted kl score
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(10, 10))
 
 
     for optimisation_round in probe_df.probe_type.unique():
@@ -93,11 +93,11 @@ if __name__ == "__main__":
         #     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8)
         # )
 
-        ax.set_xlabel("Probe Discriminability (|Effect Size|, SNR)", fontsize=13)
-        ax.set_ylabel("A-score (Optimized Information Gain)", fontsize=13)
-        ax.set_title("Optimized Probe Discriminability vs. Information Gain", fontsize=15, pad=12)
-        ax.grid(True, linestyle='--', alpha=0.4)
-        ax.legend(loc='best', fontsize=11)
-        fig.tight_layout()
-        fig.savefig(os.path.join(save_base, 'designed_probe_kl_vs_snr.png'), dpi=120)
-        plt.close(fig)
+    ax.set_xlabel("Probe Discriminability (|Effect Size|, SNR)", fontsize=13)
+    ax.set_ylabel("A-score (Optimized Information Gain)", fontsize=13)
+    ax.set_title("Optimized Probe Discriminability vs. Information Gain", fontsize=15, pad=12)
+    ax.grid(True, linestyle='--', alpha=0.4)
+    ax.legend(loc='best')
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_base, 'designed_probe_kl_vs_snr.png'), dpi=120)
+    plt.close(fig)

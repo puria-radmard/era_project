@@ -111,6 +111,7 @@ truth_caches = []
 lie_caches = []
 
 for question_idx in tqdm(trainable_questions_idxs):
+
     question = initial_questions_df['question'][question_idx].strip()
     response_row = trainable_answers[trainable_answers['question_idx'] == question_idx].iloc[0]
     
@@ -290,7 +291,7 @@ trajectory_words = []
 trajectory_init_ids = []
 
 
-for initialisation_idx in range(num_inits):
+for initialisation_idx in range(num_inits * 2):
 
     current_words = []
     for pos in word_positions:
@@ -312,6 +313,7 @@ for initialisation_idx in range(num_inits):
 
     # Coordinate ascent optimization loop
     for cycle in range(max_cycles):
+
         print(f"\n--- Cycle {cycle + 1}/{max_cycles} ---")
         changes_made = False
         
@@ -339,8 +341,9 @@ for initialisation_idx in range(num_inits):
                 
                 # Evaluate
                 test_score, test_score_std = evaluate_a_score(test_probe)
-                
-                if test_score > best_score:
+
+                replacement_condition = test_score > best_score if initialisation_idx % 2 == 0 else test_score < best_score
+                if replacement_condition:
                     
                     old_word = current_words[position_idx]
 

@@ -112,9 +112,14 @@ all_results = {
     'truth_log_probs': np.full((num_questions, num_probe_questions, num_multipliers, max_probe_length), np.nan),
     'lie_log_probs': np.full((num_questions, num_probe_questions, num_multipliers, max_probe_length), np.nan),
     
+    'truth_conditioned_entropy': np.full((num_questions, num_probe_questions, num_multipliers, max_probe_length), np.nan),
+    'lie_conditioned_entropy': np.full((num_questions, num_probe_questions, num_multipliers, max_probe_length), np.nan),
+    
     # No steering baseline
     'truth_log_probs_no_steering': np.full((num_questions, num_probe_questions, max_probe_length), np.nan),
     'lie_log_probs_no_steering': np.full((num_questions, num_probe_questions, max_probe_length), np.nan),
+    'truth_conditioned_entropy_no_steering': np.full((num_questions, num_probe_questions, max_probe_length), np.nan),
+    'lie_conditioned_entropy_no_steering': np.full((num_questions, num_probe_questions, max_probe_length), np.nan),
     'truth_projections_no_steering': np.full((num_questions, num_probe_questions, num_layers, max_probe_length), np.nan),
     'lie_projections_no_steering': np.full((num_questions, num_probe_questions, num_layers, max_probe_length), np.nan),
     
@@ -198,6 +203,9 @@ for q_idx, question_idx in enumerate(trainable_questions_idxs):
                     # Store log probs results
                     actual_length = min(probe_length - 1, max_probe_length)
                     all_results[f'{cache_name}_log_probs_no_steering'][q_idx, probe_idx, :actual_length] = token_log_probs[:actual_length].cpu().numpy()
+                    
+                    import pdb; pdb.set_trace()
+                    all_results[f'{cache_name}_conditioned_entropy_no_steering'][q_idx, probe_idx, mult_idx, :actual_length] = steered_token_entropies.cpu().numpy()
 
                     # Calculate projections onto lie-truth direction
                     # Using the primary chosen layer for projection
@@ -245,6 +253,8 @@ for q_idx, question_idx in enumerate(trainable_questions_idxs):
                             # Store logprob results
                             actual_length = min(probe_length - 1, max_probe_length)
                             all_results[f'{cache_name}_log_probs'][q_idx, probe_idx, mult_idx, :actual_length] = token_log_probs[:actual_length].cpu().numpy()
+                            
+                            all_results[f'{cache_name}_conditioned_entropy'][q_idx, probe_idx, mult_idx, :actual_length] = token_entropies.cpu().numpy()
 
                             # Calculate projections
                             for i_layer, layer in enumerate(chosen_layers):
