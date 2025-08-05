@@ -22,5 +22,5 @@ chosen_layers: [14, 15, 16, 17, 18, 19, 20]
 multipliers: [2.5, 2.25, 2.0, 1.0, 0.0]
 
 chosen_multiplier: 2.5
-chosen_temperature: 2.5
+chosen_temperature: 1.0
 num_inits_optimisation: 10

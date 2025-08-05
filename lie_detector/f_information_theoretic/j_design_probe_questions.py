@@ -41,7 +41,6 @@ max_cycles = 3
 word_positions = ['adjective', 'noun1', 'verb', 'noun2', 'adverb']
 
 aux_target = "truth" if optimisation_target == "lie" else "lie"
-assert aux_target == "lie", "Need to change, e.g., multipliers for optimisation of lie target!!!"
 
 print(f"Template: {template}")
 print(f"Optimizing for: {optimisation_target} pipeline")
@@ -148,8 +147,8 @@ def evaluate_a_score(probe_question):
     all_unsteered_truth_projections_for_probe = np.full((len(truth_caches), len(chosen_layers), len(probe_tokens)-1), np.nan)
     all_unsteered_lie_projections_for_probe = np.full((len(truth_caches), len(chosen_layers), len(probe_tokens)-1), np.nan)
 
-    all_unsteered_log_probs =  np.full((len(truth_caches), len(probe_tokens)-1), np.nan)
-    steered_log_probs = {
+    all_unsteered_entropies = np.full((len(truth_caches), len(probe_tokens)-1), np.nan)
+    steered_entropies = {
         +1: np.full((len(truth_caches), len(probe_tokens)-1), np.nan),
         -1: np.full((len(truth_caches), len(probe_tokens)-1), np.nan),
     }
@@ -157,7 +156,7 @@ def evaluate_a_score(probe_question):
     a_values = []
     
     # Loop over initial questions first to generate the relevant logprobs/projections
-    for i_cache, cache in enumerate(truth_caches):
+    for i_cache, (truth_cache, lie_cache) in enumerate(zip(truth_caches, lie_caches)):
 
         # Get unsteered probabilities
         with torch.no_grad():
@@ -170,26 +169,27 @@ def evaluate_a_score(probe_question):
             unsteered_truth_outputs = chat_wrapper.model(
                 input_ids=probe_inputs.input_ids,
                 attention_mask=probe_inputs.attention_mask,
-                past_key_values=copy.deepcopy(cache),
+                past_key_values=copy.deepcopy(truth_cache),
                 use_cache=False,
                 return_dict=True,
                 output_hidden_states=True
             )
             
-            # Extract unsteered log probabilities
-            logits = unsteered_truth_outputs.logits[0]
-            log_probs = torch.log_softmax(logits, dim=-1)
-            target_tokens = probe_inputs.input_ids[0, 1:]  # Skip first token
-            all_unsteered_log_probs[i_cache] = log_probs[:-1].gather(1, target_tokens.unsqueeze(1)).squeeze(1).cpu().numpy()
-
             unsteered_lie_outputs = chat_wrapper.model(
                 input_ids=probe_inputs.input_ids,
                 attention_mask=probe_inputs.attention_mask,
-                past_key_values=copy.deepcopy(lie_caches[i_cache]),
+                past_key_values=copy.deepcopy(lie_cache),
                 use_cache=False,
                 return_dict=True,
                 output_hidden_states=True
             )
+
+            # Extract unsteered log probabilities
+            logits = (unsteered_truth_outputs if optimisation_target == 'truth' else unsteered_lie_outputs).logits[0]
+            log_probs = torch.log_softmax(logits, dim=-1)
+            probs = log_probs.exp()
+            unsteered_entropy = -(probs[:-1] * log_probs[:-1]).sum(-1).cpu().numpy()
+            all_unsteered_entropies[i_cache] = unsteered_entropy
             
             for i_layer, layer in enumerate(chosen_layers):
                 
@@ -214,15 +214,17 @@ def evaluate_a_score(probe_question):
                     steered_outputs = chat_wrapper.model(
                         input_ids=probe_inputs.input_ids,
                         attention_mask=probe_inputs.attention_mask,
-                        past_key_values=copy.deepcopy(cache),
+                        past_key_values=copy.deepcopy(truth_cache if optimisation_target == 'truth' else lie_cache),
                         use_cache=False,
                         return_dict=True
                     )
                     
                     steered_logits = steered_outputs.logits[0]
                     steered_log_probs_tensor = torch.log_softmax(steered_logits, dim=-1)
-                    steered_token_log_probs = steered_log_probs_tensor[:-1].gather(1, target_tokens.unsqueeze(1)).squeeze(1)
-                    steered_log_probs[mult_dir][i_cache] = steered_token_log_probs.cpu().numpy()
+                    steered_probs = steered_log_probs_tensor.exp()
+
+                    steered_entropy = -(steered_probs[:-1] * steered_log_probs_tensor[:-1]).sum(-1).cpu().numpy()
+                    steered_entropies[mult_dir][i_cache] = steered_entropy
 
 
     # Calculate p(z | x_{<t}) for all initial questions here...
@@ -240,16 +242,18 @@ def evaluate_a_score(probe_question):
     ]
 
     # Loop over initial questions again to actually calculate the BALD value
-    for i_cache, cache in enumerate(truth_caches):
+    for i_cache in range(len(truth_caches)):
         
         # Compute A_t values for each token position
         a_t_values = []
         for token_pos in range(len(probe_tokens) - 1):
-            # First term: unsteered log prob
-            first_term = all_unsteered_log_probs[i_cache, token_pos].item()
+            
+            # Get entropy values for MI computation
+            entropy_unsteered = all_unsteered_entropies[i_cache, token_pos].item()
             
             # Second term: mixture of steered probs per layer
-            p_truth = all_posterior_probs[token_pos][i_cache].min()                 # XXX: for truth pipeline
+            # Choose 
+            p_truth = all_posterior_probs[token_pos][i_cache].max() if optimisation_target == 'truth' else all_posterior_probs[token_pos][i_cache].min()
 
             temp = chosen_temperature
             p_truth_temp = np.power(p_truth, 1.0 / temp)
@@ -257,12 +261,13 @@ def evaluate_a_score(probe_question):
             p_truth_tempered = p_truth_temp / (p_truth_temp + p_lie_temp)
             p_lie_tempered = 1 - p_truth_tempered
             
-            truth_steered_logprob = steered_log_probs[-1][i_cache, token_pos].item()  # Steered toward truth
-            lie_steered_logprob = steered_log_probs[+1][i_cache, token_pos].item()    # Steered toward lie
+            truth_steered_entropy = steered_entropies[-1][i_cache, token_pos].item()  # Steered toward truth  
+            lie_steered_entropy = steered_entropies[+1][i_cache, token_pos].item()    # Steered toward lie
             
-            second_term = p_truth_tempered * truth_steered_logprob + p_lie_tempered * lie_steered_logprob
+            entropy_steered = p_truth_tempered * truth_steered_entropy + p_lie_tempered * lie_steered_entropy
             
-            a_t = first_term - second_term
+            # Mutual information: I(x_t; z | x_{<t}) = H(x_t | x_{<t}) - H(x_t | z, x_{<t})
+            a_t = entropy_unsteered - entropy_steered
             a_t_values.append(a_t)
         
         # Sum across tokens for this cache

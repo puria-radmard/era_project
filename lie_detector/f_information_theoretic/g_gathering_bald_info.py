@@ -60,6 +60,12 @@ trainable_questions_idxs = trainable_answers['question_idx'].unique()
 
 print(f"Found {len(trainable_questions_idxs)} trainable questions")
 
+# Subsample questions
+trainable_questions_idxs = trainable_questions_idxs[:10]            
+print('REDUCING trainable_questions_idxs TO JUST SPORTS QUESTIONS!!')
+print(f"Using {len(trainable_questions_idxs)} initial questions")
+
+
 # Load probe questions
 probe_questions = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')['probe'].tolist()
 print(f"Loaded {len(probe_questions)} probe questions")
@@ -170,7 +176,7 @@ for q_idx, question_idx in enumerate(trainable_questions_idxs):
             user_message=probe_questions[probe_idx],
             prefiller='',
         )
-        
+
         # Process no-steering baseline for both caches
         for cache_name, cache in [("truth", truth_cache), ("lie", lie_cache)]:
             
@@ -194,26 +200,26 @@ for q_idx, question_idx in enumerate(trainable_questions_idxs):
                 # Extract log probabilities (offset by 1 token)
                 logits = probe_outputs.logits[0]  # Remove batch dimension
                 log_probs = torch.log_softmax(logits, dim=-1)
+                probs = log_probs.exp()
                 
                 # Get log-probs for actual tokens (shift by 1)
-                if probe_length > 1:
-                    target_tokens = probe_inputs.input_ids[0, 1:]  # Skip first token
-                    token_log_probs = log_probs[:-1].gather(1, target_tokens.unsqueeze(1)).squeeze(1)
-                    
-                    # Store log probs results
-                    actual_length = min(probe_length - 1, max_probe_length)
-                    all_results[f'{cache_name}_log_probs_no_steering'][q_idx, probe_idx, :actual_length] = token_log_probs[:actual_length].cpu().numpy()
-                    
-                    import pdb; pdb.set_trace()
-                    all_results[f'{cache_name}_conditioned_entropy_no_steering'][q_idx, probe_idx, mult_idx, :actual_length] = steered_token_entropies.cpu().numpy()
+                target_tokens = probe_inputs.input_ids[0, 1:]  # Skip first token
+                token_log_probs = log_probs[:-1].gather(1, target_tokens.unsqueeze(1)).squeeze(1)
+                
+                # Store log probs results
+                actual_length = min(probe_length - 1, max_probe_length)
+                all_results[f'{cache_name}_log_probs_no_steering'][q_idx, probe_idx, :actual_length] = token_log_probs[:actual_length].cpu().numpy()
+                                    
+                token_entropies = - (probs[:-1] * log_probs[:-1]).sum(-1)
+                all_results[f'{cache_name}_conditioned_entropy_no_steering'][q_idx, probe_idx, :actual_length] = token_entropies.cpu().numpy()
 
-                    # Calculate projections onto lie-truth direction
-                    # Using the primary chosen layer for projection
-                    for i_layer, layer in enumerate(chosen_layers):
-                        hidden_states = probe_outputs.hidden_states[layer + 1][0]  # Remove batch dim
-                        direction_vec = layer_direction[layer]
-                        projections = torch.matmul(hidden_states[:-1], direction_vec)  # Skip last position
-                        all_results[f'{cache_name}_projections_no_steering'][q_idx, probe_idx, i_layer, :actual_length] = projections[:actual_length].cpu().numpy()
+                # Calculate projections onto lie-truth direction
+                # Using the primary chosen layer for projection
+                for i_layer, layer in enumerate(chosen_layers):
+                    hidden_states = probe_outputs.hidden_states[layer + 1][0]  # Remove batch dim
+                    direction_vec = layer_direction[layer]
+                    projections = torch.matmul(hidden_states[:-1], direction_vec)  # Skip last position
+                    all_results[f'{cache_name}_projections_no_steering'][q_idx, probe_idx, i_layer, :actual_length] = projections[:actual_length].cpu().numpy()
 
         # Process with steering for each multiplier
         for mult_idx, multiplier in enumerate(multipliers):
@@ -245,26 +251,27 @@ for q_idx, question_idx in enumerate(trainable_questions_idxs):
                         # Extract log probabilities and projections
                         logits = probe_outputs.logits[0]
                         log_probs = torch.log_softmax(logits, dim=-1)
+                        probs = log_probs.exp()
                         
-                        if probe_length > 1:
-                            target_tokens = probe_inputs.input_ids[0, 1:]
-                            token_log_probs = log_probs[:-1].gather(1, target_tokens.unsqueeze(1)).squeeze(1)
-                            
-                            # Store logprob results
-                            actual_length = min(probe_length - 1, max_probe_length)
-                            all_results[f'{cache_name}_log_probs'][q_idx, probe_idx, mult_idx, :actual_length] = token_log_probs[:actual_length].cpu().numpy()
-                            
-                            all_results[f'{cache_name}_conditioned_entropy'][q_idx, probe_idx, mult_idx, :actual_length] = token_entropies.cpu().numpy()
+                        target_tokens = probe_inputs.input_ids[0, 1:]
+                        token_log_probs = log_probs[:-1].gather(1, target_tokens.unsqueeze(1)).squeeze(1)
+                        
+                        # Store logprob results
+                        actual_length = min(probe_length - 1, max_probe_length)
+                        all_results[f'{cache_name}_log_probs'][q_idx, probe_idx, mult_idx, :actual_length] = token_log_probs[:actual_length].cpu().numpy()
 
-                            # Calculate projections
-                            for i_layer, layer in enumerate(chosen_layers):
-                                hidden_states = probe_outputs.hidden_states[layer + 1][0]
-                                direction_vec = layer_direction[layer]
-                                projections = torch.matmul(hidden_states[:-1], direction_vec)
-                                
-                                if not torch.isclose(projections[0], projections, rtol = 1e-2).all():
-                                    print(f'STEERING NOT CLOSE - question {q_idx}, probe {probe_idx}, layer {i_layer + 1}')
-                                    print(projections.tolist())
+                        token_entropies = - (probs[:-1] * log_probs[:-1]).sum(-1)
+                        all_results[f'{cache_name}_conditioned_entropy'][q_idx, probe_idx, mult_idx, :actual_length] = token_entropies.cpu().numpy()
+
+                        # Calculate projections
+                        for i_layer, layer in enumerate(chosen_layers):
+                            hidden_states = probe_outputs.hidden_states[layer + 1][0]
+                            direction_vec = layer_direction[layer]
+                            projections = torch.matmul(hidden_states[:-1], direction_vec)
+                            
+                            if not torch.isclose(projections[0], projections, rtol = 1e-2).all():
+                                print(f'STEERING NOT CLOSE - question {q_idx}, probe {probe_idx}, layer {i_layer + 1}')
+                                print(projections.tolist())
 
         # Clean up GPU memory
         torch.cuda.empty_cache()

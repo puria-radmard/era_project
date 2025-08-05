@@ -47,7 +47,7 @@ if __name__ == "__main__":
     print(f"Non-unity probability sums: {len(non_unity_probs)} / {len(prob_sums)}")
     
     # Plot probe type analysis (unchanged)
-    discriminability_results = plot_probe_type_analysis(data, os.path.join(save_base, 'probe_type_analysis.png'), 'log_odds', 'truth')
+    discriminability_results = plot_probe_type_analysis(data, os.path.join(save_base, 'probe_type_analysis.png'), 'log_odds', 'truth', True)
     filename = os.path.join(save_base, 'discriminability_results.json')
     with open(filename, 'w') as f:
         json.dump(discriminability_results, f)

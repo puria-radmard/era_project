@@ -49,9 +49,13 @@ all_results = np.load(original_results_path, allow_pickle=True).item()
 discriminability_data_path = os.path.join('lie_detector_results/c_probe_discrimination', probe_analysis_args_name, 'discriminability_results.json')
 with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
-reference_snrs = np.abs(np.array([res["effect_size"] for res in discriminability_data['probe_results']]))
 
-print(f"Loaded {len(reference_snrs)} reference SNRs")
+# reference_snrs = np.abs(np.array([res["effect_size"] for res in discriminability_data['probe_results']]))
+# print(f"Loaded {len(reference_snrs)} reference SNRs")
+
+reference_snrs = np.array([res["effect_size"] for res in discriminability_data['probe_results']])
+print(f"Loaded {len(reference_snrs)} reference **SIGNED** SNRs")
+
 
 # Load initial data for consistency
 initial_answers_path = os.path.join('lie_detector_results/a_initial_answers', initial_answers_args_name, 'initial_answers.csv')
@@ -63,6 +67,11 @@ if limit_to_lying:
 else:
     trainable_answers = response_data
 trainable_questions_idxs = trainable_answers['question_idx'].unique()
+
+# Subsample questions
+trainable_questions_idxs = trainable_questions_idxs[:10]            
+print('REDUCING trainable_questions_idxs TO JUST SPORTS QUESTIONS!!')
+print(f"Using {len(trainable_questions_idxs)} initial questions")
 
 # Load probe questions
 probe_questions = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')['probe'].tolist()
@@ -100,14 +109,14 @@ def get_multiplier_indices(magnitude):
     return neg_idx, pos_idx
 
 # Step 3: Run pipelines for each magnitude and temperature
-temperatures = [1, 3, 5, 7]
+temperatures = [1, 3, 5]
 
 # Initialize results array: [magnitude, temperature, pipeline, probe_question, statistic]
 # statistic: 0=mean, 1=std
 results_array = np.full((num_magnitudes, len(temperatures), 2, num_probe_questions, 2), np.nan)
 
 # Initialize MAE array: [magnitude, temperature, pipeline, question, probe, token]
-mae_array = np.full((num_magnitudes, len(temperatures), 2, num_questions, num_probe_questions, max_probe_length), np.nan)
+# mae_array = np.full((num_magnitudes, len(temperatures), 2, num_questions, num_probe_questions, max_probe_length), np.nan)
 
 for mag_idx, magnitude in enumerate(unique_magnitudes):
     print(f"\nProcessing magnitude {magnitude}...")
@@ -125,14 +134,16 @@ for mag_idx, magnitude in enumerate(unique_magnitudes):
             print(f"    Running {pipeline} pipeline...")
             
             # Get arrays for this pipeline using dynamic keys
-            steered_log_probs = all_results[f'{pipeline}_log_probs']
-            unsteered_log_probs = all_results[f'{pipeline}_log_probs_no_steering']
+            steered_conditioned_entropy = all_results[f'{pipeline}_conditioned_entropy']
+            unsteered_conditioned_entropy = all_results[f'{pipeline}_conditioned_entropy_no_steering']
+
             projections_no_steering = all_results[f'{pipeline}_projections_no_steering']
             
             # Store A values: [probe_question][initial_question] = A_avg
             A_values_by_probe = [[] for _ in range(num_probe_questions)]
             
             for q_idx in tqdm(range(num_questions), desc=f"Questions ({pipeline}, temp={temp}, mag={magnitude})"):
+                
                 for probe_idx in range(num_probe_questions):
                     probe_length = probe_lengths[probe_idx]
                     
@@ -140,66 +151,61 @@ for mag_idx, magnitude in enumerate(unique_magnitudes):
                     
                     # Compute A_t for each token position
                     for token_pos in range(probe_length - 1):  # Predict next token
-                        # First term: log p(x_t | x_{<t}) - unsteered baseline
-                        first_term = unsteered_log_probs[q_idx, probe_idx, token_pos]
+                        
+                        # Get entropy values for MI computation
+                        entropy_unsteered = unsteered_conditioned_entropy[q_idx, probe_idx, token_pos]
                         
                         # Get context projections for p(z | x_{<t})
                         context_projections = projections_no_steering[q_idx, probe_idx, :, token_pos]
                         
                         # Skip if any required data is NaN
-                        if np.isnan(first_term) or np.any(np.isnan(context_projections)):
+                        if np.isnan(entropy_unsteered) or np.any(np.isnan(context_projections)):
                             raise Exception
-                        
-                        # Compute p(z | x_{<t}) for each layer
-                        context_projections_reshaped = context_projections.reshape(1, -1)  # [1, layers]
-                        
-                        # Get posterior probabilities for truth mode
-                        # i.e. p(z = true teller | prev tokens) for each layer
+
+                        # # # Get posterior probabilities for truth mode
+                        # # # i.e. p(z = true teller | prev tokens) for each layer
                         posterior_probs = prob_mode(
-                            context_projections_reshaped,
+                            context_projections.reshape(1, -1),    # [1, layers]
                             truth_means[probe_idx, :, token_pos], truth_stds[probe_idx, :, token_pos],
                             lie_means[probe_idx, :, token_pos], lie_stds[probe_idx, :, token_pos]
                         )[0]  # Shape: [1, layers] --> [layers]
-                        
+
                         # Take geometric mean across layers
                         # p_truth = np.power(np.prod(posterior_probs), 1.0 / num_layers)
+                        # p_truth = 0.5
 
                         # Just take the flat average for now...
                         # p_truth = 0.1 if pipeline == 'lie' else 0.9
 
-                        # Take the least extreme value
-                        p_truth = posterior_probs.min() if pipeline == 'truth' else posterior_probs.max()
+                        # Take the most extreme value
+                        p_truth = posterior_probs.max() if pipeline == 'truth' else posterior_probs.min()
                         
                         # Apply temperature
-                        if temp == np.inf:
-                            p_truth_tempered = 0.5
-                        else:
-                            p_truth_temp = np.power(p_truth, 1.0 / temp)
-                            p_lie_temp = np.power(1 - p_truth, 1.0 / temp)
-                            p_truth_tempered = p_truth_temp / (p_truth_temp + p_lie_temp)
-                        
+                        p_truth_temp = np.power(p_truth, 1.0 / temp)
+                        p_lie_temp = np.power(1 - p_truth, 1.0 / temp)
+                        p_truth_tempered = p_truth_temp / (p_truth_temp + p_lie_temp)
                         p_lie_tempered = 1 - p_truth_tempered
                         
                         # Second term: expected log prob under mixture using STEERED probabilities
                         # z=truth_mode uses negatively steered log probs (toward truth)
                         # z=lie_mode uses positively steered log probs (toward lie)
-                        truth_steered_logprob = steered_log_probs[q_idx, probe_idx, neg_mult_idx, token_pos]
-                        lie_steered_logprob = steered_log_probs[q_idx, probe_idx, pos_mult_idx, token_pos]
+                        truth_steered_entropy = steered_conditioned_entropy[q_idx, probe_idx, neg_mult_idx, token_pos]
+                        lie_steered_entropy = steered_conditioned_entropy[q_idx, probe_idx, pos_mult_idx, token_pos]
                         
-                        if np.isnan(truth_steered_logprob) or np.isnan(lie_steered_logprob):
+                        if np.isnan(truth_steered_entropy) or np.isnan(lie_steered_entropy):
                             continue
                         
-                        second_term = (p_truth_tempered * truth_steered_logprob + 
-                                      p_lie_tempered * lie_steered_logprob)
+                        entropy_steered = (p_truth_tempered * truth_steered_entropy + 
+                                      p_lie_tempered * lie_steered_entropy)
                         
-                        A_t = first_term - second_term
+                        A_t = entropy_unsteered - entropy_steered
                         A_t_values.append(A_t)
 
-                        unsteered_prob = np.exp(first_term)
-                        mixture_prob = (p_truth_tempered * np.exp(truth_steered_logprob) + 
-                                    p_lie_tempered * np.exp(lie_steered_logprob))
-                        mae = abs(mixture_prob - unsteered_prob)
-                        mae_array[mag_idx, temp_idx, pipeline_idx, q_idx, probe_idx, token_pos] = mae
+                        # unsteered_prob = np.exp(first_term)
+                        # mixture_prob = (p_truth_tempered * np.exp(truth_steered_logprob) + 
+                        #             p_lie_tempered * np.exp(lie_steered_logprob))
+                        # mae = abs(mixture_prob - unsteered_prob)
+                        # mae_array[mag_idx, temp_idx, pipeline_idx, q_idx, probe_idx, token_pos] = mae
                     
                     # Average across tokens
                     if len(A_t_values) > 0:
@@ -208,12 +214,8 @@ for mag_idx, magnitude in enumerate(unique_magnitudes):
             
             # Aggregate across initial questions for each probe
             for probe_idx in range(num_probe_questions):
-                if len(A_values_by_probe[probe_idx]) > 0:
-                    probe_mean = np.mean(A_values_by_probe[probe_idx])
-                    probe_std = np.std(A_values_by_probe[probe_idx])
-                else:
-                    probe_mean = np.nan
-                    probe_std = np.nan
+                probe_mean = np.mean(A_values_by_probe[probe_idx])
+                probe_std = np.std(A_values_by_probe[probe_idx])
                 
                 # Store in results array
                 results_array[mag_idx, temp_idx, pipeline_idx, probe_idx, 0] = probe_mean
@@ -223,7 +225,7 @@ for mag_idx, magnitude in enumerate(unique_magnitudes):
 print("\nSaving results...")
 save_data = {
     'results_array': results_array,  # [magnitude, temperature, pipeline, probe_question, statistic]
-    'mae_array': mae_array,  # [magnitude, temperature, pipeline, question, probe, token]
+    # 'mae_array': mae_array,  # [magnitude, temperature, pipeline, question, probe, token]
     'unique_magnitudes': unique_magnitudes,
     'temperatures': temperatures,
     'reference_snrs': reference_snrs,
@@ -312,60 +314,60 @@ elif num_magnitudes == 1:
 elif len(temperatures) == 1:
     axes_constraint = axes_constraint.reshape(-1, 1)
 
-# Store MAE statistics for summary
-mae_stats = {}
+# # # Store MAE statistics for summary
+# # mae_stats = {}
 
-for mag_idx, magnitude in enumerate(unique_magnitudes):
-    for temp_idx, temp in enumerate(temperatures):
-        ax = axes_constraint[mag_idx, temp_idx]
+# # for mag_idx, magnitude in enumerate(unique_magnitudes):
+# #     for temp_idx, temp in enumerate(temperatures):
+# #         ax = axes_constraint[mag_idx, temp_idx]
         
-        # Get MAE data for both pipelines
-        truth_maes = mae_array[mag_idx, temp_idx, 0, :, :, :].flatten()  # Truth pipeline
-        lie_maes = mae_array[mag_idx, temp_idx, 1, :, :, :].flatten()    # Lie pipeline
+# #         # Get MAE data for both pipelines
+# #         truth_maes = mae_array[mag_idx, temp_idx, 0, :, :, :].flatten()  # Truth pipeline
+# #         lie_maes = mae_array[mag_idx, temp_idx, 1, :, :, :].flatten()    # Lie pipeline
         
-        # Remove NaN values
-        truth_maes_valid = truth_maes[~np.isnan(truth_maes)]
-        lie_maes_valid = lie_maes[~np.isnan(lie_maes)]
+# #         # Remove NaN values
+# #         truth_maes_valid = truth_maes[~np.isnan(truth_maes)]
+# #         lie_maes_valid = lie_maes[~np.isnan(lie_maes)]
         
-        # Plot histograms
-        if len(truth_maes_valid) > 0:
-            ax.hist(truth_maes_valid, bins=50, alpha=0.6, color='blue', 
-                   label=f'Truth (n={len(truth_maes_valid)})', density=True)
-            mae_stats[f'mag_{magnitude}_temp_{temp}_truth'] = {
-                'mean': np.mean(truth_maes_valid),
-                'median': np.median(truth_maes_valid),
-                'std': np.std(truth_maes_valid),
-                'count': len(truth_maes_valid)
-            }
-            # Add mean line for truth MAE
-            mean_truth_mae = np.mean(truth_maes_valid)
-            ax.axvline(mean_truth_mae, color='blue', linestyle=':', linewidth=2, label=f'Truth Mean = {mean_truth_mae:.4f}')
+# #         # Plot histograms
+# #         if len(truth_maes_valid) > 0:
+# #             ax.hist(truth_maes_valid, bins=50, alpha=0.6, color='blue', 
+# #                    label=f'Truth (n={len(truth_maes_valid)})', density=True)
+# #             mae_stats[f'mag_{magnitude}_temp_{temp}_truth'] = {
+# #                 'mean': np.mean(truth_maes_valid),
+# #                 'median': np.median(truth_maes_valid),
+# #                 'std': np.std(truth_maes_valid),
+# #                 'count': len(truth_maes_valid)
+# #             }
+# #             # Add mean line for truth MAE
+# #             mean_truth_mae = np.mean(truth_maes_valid)
+# #             ax.axvline(mean_truth_mae, color='blue', linestyle=':', linewidth=2, label=f'Truth Mean = {mean_truth_mae:.4f}')
         
-        if len(lie_maes_valid) > 0:
-            ax.hist(lie_maes_valid, bins=50, alpha=0.6, color='red', 
-                   label=f'Lie (n={len(lie_maes_valid)})', density=True)
-            mae_stats[f'mag_{magnitude}_temp_{temp}_lie'] = {
-                'mean': np.mean(lie_maes_valid),
-                'median': np.median(lie_maes_valid),
-                'std': np.std(lie_maes_valid),
-                'count': len(lie_maes_valid)
-            }
-            # Add mean line for lie MAE
-            mean_lie_mae = np.mean(lie_maes_valid)
-            ax.axvline(mean_lie_mae, color='blue', linestyle=':', linewidth=2, label=f'Lie Mean = {mean_lie_mae:.4f}')
+# #         if len(lie_maes_valid) > 0:
+# #             ax.hist(lie_maes_valid, bins=50, alpha=0.6, color='red', 
+# #                    label=f'Lie (n={len(lie_maes_valid)})', density=True)
+# #             mae_stats[f'mag_{magnitude}_temp_{temp}_lie'] = {
+# #                 'mean': np.mean(lie_maes_valid),
+# #                 'median': np.median(lie_maes_valid),
+# #                 'std': np.std(lie_maes_valid),
+# #                 'count': len(lie_maes_valid)
+# #             }
+# #             # Add mean line for lie MAE
+# #             mean_lie_mae = np.mean(lie_maes_valid)
+# #             ax.axvline(mean_lie_mae, color='blue', linestyle=':', linewidth=2, label=f'Lie Mean = {mean_lie_mae:.4f}')
 
-        ax.set_xlabel('MAE (|mixture_prob - unsteered_prob|)', fontsize=12)
-        ax.set_ylabel('Density', fontsize=12)
-        ax.set_title(f'Constraint Validation\nMagnitude = {magnitude}, Temperature = {temp}', fontsize=14)
-        ax.legend(fontsize=10)
-        ax.grid(True, alpha=0.3)
+# #         ax.set_xlabel('MAE (|mixture_prob - unsteered_prob|)', fontsize=12)
+# #         ax.set_ylabel('Density', fontsize=12)
+# #         ax.set_title(f'Constraint Validation\nMagnitude = {magnitude}, Temperature = {temp}', fontsize=14)
+# #         ax.legend(fontsize=10)
+# #         ax.grid(True, alpha=0.3)
         
-        # Add vertical line at MAE = 0 (perfect constraint satisfaction)
-        ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1)
+# #         # Add vertical line at MAE = 0 (perfect constraint satisfaction)
+# #         ax.axvline(x=0, color='black', linestyle='--', alpha=0.5, linewidth=1)
 
-plt.tight_layout()
-plt.savefig(os.path.join(save_base, 'constraint_validation.png'), dpi=300, bbox_inches='tight')
-plt.close()
+# # plt.tight_layout()
+# # plt.savefig(os.path.join(save_base, 'constraint_validation.png'), dpi=300, bbox_inches='tight')
+# # plt.close()
 
 # Print correlation summary
 print("\nCorrelation Summary:")
@@ -377,25 +379,20 @@ for key, stats in correlation_stats.items():
     print(f"  Slope: {stats['slope']:.4f} ± {stats['slope_err']:.4f}")
     print()
 
-# Print MAE summary
-print("\nConstraint Validation Summary (MAE Statistics):")
-print("=" * 60)
-for key, stats in mae_stats.items():
-    print(f"{key}:")
-    print(f"  Mean MAE: {stats['mean']:.6f}")
-    print(f"  Median MAE: {stats['median']:.6f}")
-    print(f"  Std MAE: {stats['std']:.6f}")
-    print(f"  Token count: {stats['count']}")
-    print()
+# # # Print MAE summary
+# # print("\nConstraint Validation Summary (MAE Statistics):")
+# # print("=" * 60)
+# # for key, stats in mae_stats.items():
+# #     print(f"{key}:")
+# #     print(f"  Mean MAE: {stats['mean']:.6f}")
+# #     print(f"  Median MAE: {stats['median']:.6f}")
+# #     print(f"  Std MAE: {stats['std']:.6f}")
+# #     print(f"  Token count: {stats['count']}")
+# #     print()
 
 # Find best parameter combinations (lowest mean MAE)
-best_truth = min([(k, v['mean']) for k, v in mae_stats.items() if 'truth' in k], key=lambda x: x[1])
-best_lie = min([(k, v['mean']) for k, v in mae_stats.items() if 'lie' in k], key=lambda x: x[1])
-
-print("Best Parameter Combinations (Lowest Mean MAE):")
-print(f"  Truth pipeline: {best_truth[0]} (MAE = {best_truth[1]:.6f})")
-print(f"  Lie pipeline: {best_lie[0]} (MAE = {best_lie[1]:.6f})")
-print()
+# best_truth = min([(k, v['mean']) for k, v in mae_stats.items() if 'truth' in k], key=lambda x: x[1])
+# best_lie = min([(k, v['mean']) for k, v in mae_stats.items() if 'lie' in k], key=lambda x: x[1])
 
 print(f"Analysis complete! Results saved to {save_base}")
 print(f"- Computed A values: bald_values.npy") 
@@ -403,11 +400,11 @@ print(f"- BALD correlation plots: bald_vs_snr.png")
 print(f"- Constraint validation plots: constraint_validation.png")
 print(f"- Results array shape: {results_array.shape}")
 print(f"  [magnitude={num_magnitudes}, temperature={len(temperatures)}, pipeline=2, probe_question={num_probe_questions}, statistic=2]")
-print(f"- MAE array shape: {mae_array.shape}")
-print(f"  [magnitude={num_magnitudes}, temperature={len(temperatures)}, pipeline=2, question={num_questions}, probe={num_probe_questions}, token={max_probe_length}]")
+# print(f"- MAE array shape: {mae_array.shape}")
+# print(f"  [magnitude={num_magnitudes}, temperature={len(temperatures)}, pipeline=2, question={num_questions}, probe={num_probe_questions}, token={max_probe_length}]")
 
 # Save correlation stats and MAE stats to the data file
 save_data['correlation_stats'] = correlation_stats
-save_data['mae_stats'] = mae_stats
+# save_data['mae_stats'] = mae_stats
 np.save(os.path.join(save_base, 'bald_values.npy'), save_data)
 print(f"- All statistics saved to bald_values.npy")
