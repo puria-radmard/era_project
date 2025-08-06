@@ -1,4 +1,4 @@
-batch_size: 1
+batch_size: 8
 system_prompt: ""
 model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
 initial_answers_args_name: dang_dm_balanced

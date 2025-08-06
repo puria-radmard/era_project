@@ -50,7 +50,8 @@ class ChatTemplateWrapper:
         in_context_answers: Optional[List[str]] = None,
         user_message: Optional[str] = None,
         prefiller: Optional[str] = None,
-        keep_bos: bool = False
+        keep_bos: bool = False,
+        skip_special_tokens: bool = False
     ) -> str:
         """
         Format a system prompt and user message according to the model's chat template.
@@ -88,7 +89,7 @@ class ChatTemplateWrapper:
             add_generation_prompt = False
    
 
-        prompt = self.tokenizer.apply_chat_template(history, tokenize = False, add_generation_prompt=add_generation_prompt, continue_final_message = (prefiller is not None and prefiller != ""),)
+        prompt = self.tokenizer.apply_chat_template(history, tokenize = False, add_generation_prompt=add_generation_prompt, continue_final_message = (prefiller is not None and prefiller != ""), skip_special_tokens = skip_special_tokens)
 
         # FIXME: so crazy to me that this is in here
         prompt = re.sub(r'\n\nCutting Knowledge Date: [A-Za-z]+\s+\d{4}\nToday Date: \d{1,2} [A-Za-z]{3} \d{4}', '', prompt)
@@ -124,6 +125,7 @@ class ChatTemplateWrapper:
         past_key_values: Optional[DynamicCache] = None,
         return_dict: bool = True,
         use_cache: bool = True,
+        return_input_ids: bool = False,
         **forward_kwargs: Any
     ) -> Dict[str, Any]:
         """
@@ -165,7 +167,10 @@ class ChatTemplateWrapper:
             **forward_kwargs
         )
 
-        return outputs
+        if return_input_ids:
+            return outputs, inputs.input_ids
+        else:
+            return outputs
     
     @torch.no_grad()
     def generate_parallel(

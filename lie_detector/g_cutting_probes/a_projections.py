@@ -43,7 +43,7 @@ prompt_index = args.prompt_idx
 limit_to_lying = args.limit_to_lying
 
 
-save_base = os.path.join('lie_detector_results/f_information_theoretic', args.args_name)
+save_base = os.path.join('lie_detector_results/g_cutting_probes', args.args_name)
 os.makedirs(save_base, exist_ok=True)
 args.save(save_base)
 
@@ -68,6 +68,11 @@ if limit_to_lying:
 else:
     trainable_answers = response_data
 trainable_questions_idxs = trainable_answers['question_idx']
+
+# Subsample questions
+trainable_questions_idxs = trainable_questions_idxs[:10]            
+print('REDUCING trainable_questions_idxs TO JUST SPORTS QUESTIONS!!')
+print(f"Using {len(trainable_questions_idxs)} initial questions")
 
 
 # Load in the probe questions and batchize them
@@ -161,26 +166,34 @@ for i_qai, qai in enumerate(tqdm(trainable_questions_idxs)):
                 prefiller='',
             ) for pi in probe_index_batch
         ]
-        lie_forward = chat_wrapper.forward(
+        lie_forward, input_ids = chat_wrapper.forward(
             chats = lie_followup_chats,
             past_key_values = copy.deepcopy(lie_cache),
-            output_hidden_states = True
+            output_hidden_states = True,
+            return_input_ids=True
         )
 
-        # [layers, new tokens, hidden size]
-        assert batch_size == 1
-        lie_hidden_states = torch.concat(lie_forward['hidden_states'][1:])
-        truth_hidden_states = torch.concat(truth_forward['hidden_states'][1:])
-
-        this_question_lie_hidden_states[probe_index_batch,:,:lie_hidden_states.shape[1]] = lie_hidden_states.cpu().numpy()
-        this_question_truth_hidden_states[probe_index_batch,:,:truth_hidden_states.shape[1]] = truth_hidden_states.cpu().numpy()
+        # [batch, layers, new tokens, hidden size]
+        lie_hidden_states = torch.stack(lie_forward['hidden_states'][1:], 1)
+        truth_hidden_states = torch.stack(truth_forward['hidden_states'][1:], 1)
 
         del truth_forward
         del lie_forward
-        torch.cuda.empty_cache()
-
-    all_lie_projections[i_qai] = (this_question_lie_hidden_states * lie_directions[None,:,None,:]).sum(-1)
-    all_truth_projections[i_qai] = (this_question_truth_hidden_states * lie_directions[None,:,None,:]).sum(-1)
+        
+        for b in range(batch_size):
+            # Find the start index where non_special_tokens appears as a contiguous subsequence in input_ids[b]
+            global_idx = probe_index_batch[b]
+            non_special_tokens = chat_wrapper.tokenizer.encode(probe_questions[global_idx], add_special_tokens=False)
+            input_seq = input_ids[b].tolist()
+            for start_idx in range(len(input_seq) - len(non_special_tokens) + 1):
+                if input_seq[start_idx:start_idx + len(non_special_tokens)] == non_special_tokens:
+                    non_special_indices = list(range(start_idx, start_idx + len(non_special_tokens)))
+                    break
+            else:
+                raise ValueError("non_special_tokens subsequence not found in input_ids[b]")
+            
+            this_question_lie_hidden_states[global_idx,:,:len(non_special_indices),:] = lie_hidden_states[b,:,non_special_indices,:].cpu().numpy()
+            this_question_truth_hidden_states[global_idx,:,:len(non_special_indices),:] = truth_hidden_states[b,:,non_special_indices,:].cpu().numpy()
 
     dedicated_directions += (this_question_lie_hidden_states - this_question_truth_hidden_states) / len(trainable_questions_idxs)
 
@@ -238,29 +251,43 @@ for i_qai, qai in enumerate(tqdm(trainable_questions_idxs)):
                 prefiller='',
             ) for pi in probe_index_batch
         ]
-        lie_forward = chat_wrapper.forward(
+        lie_forward, input_ids = chat_wrapper.forward(
             chats = lie_followup_chats,
             past_key_values = copy.deepcopy(lie_cache),
-            output_hidden_states = True
+            output_hidden_states = True,
+            return_input_ids=True
         )
 
-        # [layers, new tokens]
-        lie_hidden_states = torch.concat(lie_forward['hidden_states'][1:])
-        truth_hidden_states = torch.concat(truth_forward['hidden_states'][1:])
+        # [batch, layers, new tokens, hidden size]
+        lie_hidden_states = torch.stack(lie_forward['hidden_states'][1:], 1)
+        truth_hidden_states = torch.stack(truth_forward['hidden_states'][1:], 1)
 
-        this_question_lie_hidden_states[probe_index_batch,:,:lie_hidden_states.shape[1]] = lie_hidden_states.cpu().numpy()
-        this_question_truth_hidden_states[probe_index_batch,:,:truth_hidden_states.shape[1]] = truth_hidden_states.cpu().numpy()
+        for b in range(batch_size):
+            # Find the start index where non_special_tokens appears as a contiguous subsequence in input_ids[b]
+            global_idx = probe_index_batch[b]
+            non_special_tokens = chat_wrapper.tokenizer.encode(probe_questions[global_idx], add_special_tokens=False)
+            input_seq = input_ids[b].tolist()
+            for start_idx in range(len(input_seq) - len(non_special_tokens) + 1):
+                if input_seq[start_idx:start_idx + len(non_special_tokens)] == non_special_tokens:
+                    non_special_indices = list(range(start_idx, start_idx + len(non_special_tokens)))
+                    break
+            else:
+                raise ValueError("non_special_tokens subsequence not found in input_ids[b]")
+            
+            # non_special_indices = indices of lie_hidden_states which do not align with 1, 2, 3, 4 in input_ids[b] (but not hardcoded)
+            this_question_lie_hidden_states[global_idx,:,:len(non_special_indices),:] = lie_hidden_states[b,:,non_special_indices,:].cpu().numpy()
+            this_question_truth_hidden_states[global_idx,:,:len(non_special_indices),:] = truth_hidden_states[b,:,non_special_indices,:].cpu().numpy()
 
         del truth_forward
         del lie_forward
-        torch.cuda.empty_cache()
     
+
+    all_lie_projections[i_qai] = (this_question_lie_hidden_states * lie_directions[None,:,None,:]).sum(-1)
+    all_truth_projections[i_qai] = (this_question_truth_hidden_states * lie_directions[None,:,None,:]).sum(-1)
 
     all_lie_dedicated_projections[i_qai] = (dedicated_directions_normalized * this_question_lie_hidden_states).sum(-1)
     all_truth_dedicated_projections[i_qai] = (dedicated_directions_normalized * this_question_truth_hidden_states).sum(-1)
-
-
-
+    import pdb; pdb.set_trace()
 
 
 
