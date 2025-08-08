@@ -95,8 +95,8 @@ if __name__ == "__main__":
     filename = os.path.join(output_path, 'discriminability_results.json')
     with open(filename, 'w') as f:
         json.dump(discriminability_results, f)
-    
-    
+
+
     # Get probe type information
     probe_type_info = get_probe_type_info(probe_df)    
     all_results = {}

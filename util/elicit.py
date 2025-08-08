@@ -2,7 +2,7 @@ import copy
 import torch
 import string
 from transformers.cache_utils import DynamicCache
-from typing import Union, List, Optional, Dict
+from typing import Tuple, Union, List, Optional, Dict
 from model.base import ChatTemplateWrapper
 from util.question import QuestionConfig
 import torch.nn.functional as F
@@ -556,3 +556,196 @@ def elicit_sequence_log_probs(
         sequence_log_probs.append(avg_log_prob)
     
     return torch.tensor(sequence_log_probs)
+
+
+def elicit_user_text_completion(
+    chat_wrapper: ChatTemplateWrapper,
+    texts: List[str],
+    system_prompt: Optional[str] = None,
+    cache_data: Optional[Dict] = None,
+    max_new_tokens: int = 50,
+    temperature: float = 0.7,
+    do_sample: bool = True
+) -> List[str]:
+    """
+    Generate text completions for a batch of incomplete texts.
+    
+    Args:
+        chat_wrapper: The chat wrapper containing model and tokenizer
+        texts: List of incomplete texts to complete
+        system_prompt: System prompt to use (ignored if cache_data provided)
+        cache_data: Optional precomputed cache data from create_prompt_cache()
+        max_new_tokens: Maximum number of new tokens to generate
+        temperature: Sampling temperature for generation
+        do_sample: Whether to use sampling or greedy decoding
+        
+    Returns:
+        List of generated completion strings, one per input text
+    """
+    if not texts:
+        raise ValueError("Texts list cannot be empty")
+    
+    # Format chats - just pass the raw text as user message
+    formatted_chats = []
+    
+    for text in texts:
+        # No templates, no prefillers - just raw text completion
+        formatted_chat = chat_wrapper.format_chat(
+            system_prompt=system_prompt,
+            user_message=text,
+        )
+        formatted_chats.append(formatted_chat)
+    
+    # Generate responses using the chat wrapper
+    if 'mistral' in chat_wrapper.model.config.model_type.lower():
+        user_close_delim = '[/INST]'
+    elif 'llama' in chat_wrapper.model.config.model_type.lower():
+        user_close_delim = '<|eot_id|>'
+
+    reformatted_chats = []
+    for fc in formatted_chats:
+        fc: str
+        assert fc.endswith(user_close_delim)
+        reformatted_chats.append(fc.removesuffix(user_close_delim))
+
+    generation_result = chat_wrapper.generate(
+        chats=reformatted_chats,
+        past_key_values=cache_data["cache"] if cache_data else None,
+        past_key_values_str=cache_data["formatted_prompt"] if cache_data else None,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        do_sample=do_sample
+    )
+    return generation_result["generated_texts"]
+
+
+
+def get_next_user_token_probs(
+    chat_wrapper,
+    cache_data: Dict,
+    user_message: str,
+    extract_hidden_states: bool = False
+) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    """
+    Get next token probabilities given a cache state, optionally with hidden states.
+    
+    Args:
+        chat_wrapper: The chat wrapper containing model and tokenizer
+        cache_data: Cache data from create_prompt_cache()
+        user_message: Optional user message (defaults to empty for pure continuation)
+        extract_hidden_states: If True, also return hidden states from all layers
+        
+    Returns:
+        If extract_hidden_states=False: Tensor of shape [vocab_size] with next token probabilities
+        If extract_hidden_states=True: Tuple of (probs, hidden_states) where hidden_states is [num_layers, hidden_size]
+    """
+    # Format chat with minimal user message
+    formatted_chat = chat_wrapper.format_chat(
+        system_prompt="",
+        user_message=user_message,
+    )
+    
+    # Remove end delimiter like in elicit_user_text_completion
+    if 'mistral' in chat_wrapper.model.config.model_type.lower():
+        user_close_delim = '[/INST]'
+    elif 'llama' in chat_wrapper.model.config.model_type.lower():
+        user_close_delim = '<|eot_id|>'
+    
+    assert formatted_chat.endswith(user_close_delim)
+    reformatted_chat = formatted_chat.removesuffix(user_close_delim)
+
+    # Get model outputs
+    outputs = chat_wrapper.forward(
+        chats=[reformatted_chat],
+        past_key_values=cache_data["cache"],
+        use_cache=False,
+        output_hidden_states=extract_hidden_states,
+    )
+    
+    # Get logits for the last token position and convert to probabilities
+    last_token_logits = outputs.logits[0, -1, :]  # [vocab_size]
+    next_token_probs = F.softmax(last_token_logits, dim=-1)
+
+    if not extract_hidden_states:
+        return next_token_probs
+    
+    # Extract hidden states from all layers at the last token position
+    hidden_states = outputs.hidden_states  # Tuple of [batch_size, seq_len, hidden_size] tensors
+    last_token_hidden_states = []
+    
+    for layer_hidden in hidden_states:
+        last_token_hidden = layer_hidden[0, -1, :]  # [hidden_size] 
+        last_token_hidden_states.append(last_token_hidden)
+    
+    # Stack into [num_layers, hidden_size]
+    stacked_hidden_states = torch.stack(last_token_hidden_states)
+    
+    return next_token_probs, stacked_hidden_states
+
+
+
+def generate_discriminative_sequence(
+    *_,
+    chat_wrapper,
+    truth_cache: Dict,
+    lie_cache: Dict,
+    max_tokens: int = 20,
+    initial_text: str = "",
+    lie_maximise: bool = False,
+    do_discriminative: bool = True,
+    stopping_string: Optional[str] = None
+) -> Tuple[str, List[float]]:
+    """
+    Generate a sequence by greedily selecting the most discriminative token at each step.
+    
+    Args:
+        chat_wrapper: The chat wrapper containing model and tokenizer
+        truth_cache: Cache data for truth persona
+        lie_cache: Cache data for lie persona
+        max_tokens: Maximum number of tokens to generate
+        initial_text: Starting text for the sequence
+        
+    Returns:
+        Tuple of (generated_sequence, discrimination_scores_per_token)
+    """
+    generated_text = initial_text
+    discrimination_scores = []
+    sequence_progression = []
+
+    full_token_count = True
+    
+    for step in range(max_tokens):
+        
+        # Compute probabilities/probability differences
+        if lie_maximise:
+            prob_diffs = get_next_user_token_probs(chat_wrapper, lie_cache, generated_text)
+            if do_discriminative:
+                prob_diffs = prob_diffs - get_next_user_token_probs(chat_wrapper, truth_cache, generated_text)
+        else:
+            prob_diffs = get_next_user_token_probs(chat_wrapper, truth_cache, generated_text)
+            if do_discriminative:
+                prob_diffs = prob_diffs - get_next_user_token_probs(chat_wrapper, lie_cache, generated_text)
+        
+        # Find most discriminative token
+        most_discriminative_idx = torch.argmax(prob_diffs)
+        discrimination_score = prob_diffs[most_discriminative_idx].item()
+        
+        # Convert to token string
+        next_token = chat_wrapper.tokenizer.decode([most_discriminative_idx.item()])
+        
+        # Append to generated text
+        generated_text += next_token
+        discrimination_scores.append(discrimination_score)
+        sequence_progression.append(generated_text.removeprefix(initial_text))
+
+        if stopping_string != None and stopping_string in generated_text:
+            full_token_count = False
+            break
+
+        # # Early stopping if we hit end tokens or very low discrimination
+        # if discrimination_score < 0.001:  # Threshold for "not discriminative enough"
+        #     print(f"Stopping early at step {step} due to low discrimination: {discrimination_score}")
+        #     break
+    
+    return generated_text, sequence_progression, discrimination_scores, full_token_count
+

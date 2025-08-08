@@ -2,14 +2,18 @@ import random
 from typing import Dict
 
 
-def get_context_yn(N: int, valid_probe_results, probes_df_original, ):
+def get_context_yn(N: int, valid_probe_results, probes_df_original, *_, randomly_select: bool = False):
     """Generate all base context materials for one sample."""
     
     if N == 0:
         return {}
     
     # Get top N discriminative probes
-    top_n_probe_data = valid_probe_results[:N]
+    if randomly_select:
+        top_n_probe_data = random.sample(valid_probe_results, N)
+    else:
+        top_n_probe_data = valid_probe_results[:N]
+
     top_n_questions = [probes_df_original.iloc[original_idx]['probe'] for original_idx, _ in top_n_probe_data]
     
     # Generate truth-inducing answers (opposite of lie-inducing based on effect size)
