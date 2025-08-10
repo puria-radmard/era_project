@@ -9,56 +9,52 @@ from util.lying_context import get_context_yn
 from util.elicit import generate_discriminative_sequence
 import sys, os
 
-# Main script logic
 config_path = sys.argv[1]
 args = YamlConfig(config_path)
 
 model_name = args.model_name
 max_generation_tokens = args.max_generation_tokens
-
-# Probe-related args
-probe_responses_args_name = args.probe_responses_args_name
-probe_analysis_args_name = args.probe_analysis_args_name
 probe_file_name = args.probe_file_name
 prompt_index = args.prompt_idx
-excluded_probe_types = args.excluded_probe_types
-excluded_probe_indices = args.excluded_probe_indices
-
-# Context iteration args
-n_samples = args.samples_per_context_length
+n_samples = args.samples_per_truncation
+probes_to_augment = args.probes_to_augment
+examples_in_context = args.examples_in_context
 
 # Save to subdirectory
-save_base = os.path.join('lie_detector_results/i_discriminative_tokens', args.args_name)
+save_base = os.path.join('probe_generation_results/a_introspective_probe_generation', args.args_name)
 os.makedirs(save_base, exist_ok=True)
 args.save(save_base)
 
-self_consistency_results_path = os.path.join(save_base, 'truncated_probe_completions.csv')
+self_consistency_results_path = os.path.join(save_base, 'c_truncated_probe_completions.csv')
 
 # Load probe questions and discriminability data
 print("Loading probe discriminability data...")
 probes_df_original = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')
-probes_df = probes_df_original[~probes_df_original['probe_type'].isin(excluded_probe_types)]
-print(f"Using probe questions (excluded: {excluded_probe_types})")
 
 # Load discriminability results
-discriminability_data_path = os.path.join('lie_detector_results/c_probe_discrimination', probe_analysis_args_name, 'discriminability_results.json')
+discriminability_data_path = os.path.join('probe_generation_results/a_introspective_probe_generation', args.args_name, 'c_discriminability_results.json')
 with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
 
 # Get valid probes and sort by discriminability
-probe_results = discriminability_data['probe_results']
-valid_probe_results = [(i, result) for i, result in enumerate(probe_results) 
-                      if result['probe_type'] not in excluded_probe_types
-                      and i not in excluded_probe_indices]
-
+valid_probe_results = [(i, result) for i, result in enumerate(discriminability_data)]
+for vpr in valid_probe_results:
+    vpr[1]['effect_size'] = sum(vpr[1]['effect_sizes_by_append']) / len(vpr[1]['effect_sizes_by_append'])
 valid_probe_results.sort(key=lambda x: abs(x[1]['effect_size']), reverse=True)
 
 # Get most discriminative (for context) and least discriminative (for testing completion)
-most_discriminative_probe_results = valid_probe_results[:10]  # Top 10 for context
-least_discriminative_probe_results = valid_probe_results[-5:]  # Bottom 5 for testing
+most_discriminative_probe_results = []
+for vpr in valid_probe_results:
+    effect_sizes = vpr[1]['effect_sizes_by_append']
+    if all(e > 0 for e in effect_sizes) or all(e < 0 for e in effect_sizes):
+        most_discriminative_probe_results.append(vpr)
+    if len(most_discriminative_probe_results) == 10:
+        break
+
+least_discriminative_probe_results = valid_probe_results[-probes_to_augment:]  # Bottom 5 for testing
 
 print(f"Found {len(valid_probe_results)} valid probes")
-print(f"Using top 10 most discriminative for context, bottom 5 least discriminative for completion testing")
+print(f"Using top {len(most_discriminative_probe_results)} most discriminative for context, bottom {probes_to_augment} least discriminative for completion testing")
 
 with open('data/all_prompts.json', 'r') as f:
     prompts = json.load(f)
@@ -84,7 +80,7 @@ print(f"TESTING SELF-CONSISTENCY WITH CONTEXT LENGTH N=5")
 print(f"{'='*80}")
 
 # Generate all context materials for this run
-all_context_materials = [get_context_yn(5, most_discriminative_probe_results, probes_df_original, randomly_select=True) for _ in range(n_samples)]
+all_context_materials = [get_context_yn(examples_in_context, most_discriminative_probe_results, probes_df_original, randomly_select=True) for _ in range(n_samples)]
 
 for sample_idx in tqdm(range(n_samples), desc="Processing samples"):
     context_materials = all_context_materials[sample_idx]
@@ -118,8 +114,8 @@ for sample_idx in tqdm(range(n_samples), desc="Processing samples"):
         
         print(f"  Testing probe {probe_idx}: '{probe_words_content}' ({len(probe_words)} words)")
         
-        # Test each prefix length (3 word, 4 words, ..., all words) -- because 1 or 2 words typically leads to predictible extreme sports content...
-        for prefix_length in range(3, len(probe_words) + 1):
+        # Test each prefix length (3 word, 4 words, ..., all words)
+        for prefix_length in range(1, len(probe_words) + 1):
             prefix_words = probe_words[:prefix_length]
             prefix_text = ' '.join(prefix_words)
         
@@ -150,7 +146,7 @@ for sample_idx in tqdm(range(n_samples), desc="Processing samples"):
                 })
                 
                 print(f"    Prefix '{prefix_text}' ({generation_type}): '" + generated_sequence.replace(chr(10), '\\n') + "'")
-            
-        # Save after each sample
-        results_df = pd.DataFrame(results_rows)
-        results_df.to_csv(self_consistency_results_path, index=False)
+                
+            # Save after each sample
+            results_df = pd.DataFrame(results_rows)
+            results_df.to_csv(self_consistency_results_path, index=False)

@@ -46,4 +46,11 @@ python lie_detector/h_completion_probes/c_generating_probe_questions.py lie_dete
 python lie_detector/h_completion_probes/d_yn_probe_answers.py lie_detector/z_config/h_generating_probes/dang_dm_balanced.yaml
 python lie_detector/h_completion_probes/e_yn_probe_analysis.py lie_detector/z_config/h_generating_probes/dang_dm_balanced.yaml
 
+python lie_detector/h_completion_probes/d0_yn_probe_answers_original.py lie_detector/z_config/h_generating_probes/dang_dm_balanced.yaml
 python lie_detector/h_completion_probes/d1_generating_truncated_probes.py lie_detector/z_config/h_generating_probes/dang_dm_balanced.yaml
+python lie_detector/h_completion_probes/d2_yn_probe_answers.py lie_detector/z_config/h_generating_probes/dang_dm_balanced.yaml
+python lie_detector/h_completion_probes/d3_comparison_to_originals.py lie_detector/z_config/h_generating_probes/dang_dm_balanced.yaml
+
+
+#python lie_detector/b_probe_questions/yn.py lie_detector/z_config/b_probe_answers/dang_dm_balanced.yaml
+#python lie_detector/c_probe_analysis/yn_narrow.py lie_detector/z_config/c_probe_discrimination/dang_dm_balanced.yaml

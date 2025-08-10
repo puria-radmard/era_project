@@ -340,9 +340,10 @@ def plot_probe_type_analysis_modified(data: pd.DataFrame, filepath: str, enable_
         ax1.tick_params(axis='x', rotation=45)
         
         # Custom legend
-        legend_labels = ['Truth=0, Append=0', 'Truth=0, Append=1', 'Truth=1, Append=0', 'Truth=1, Append=1']
+        # legend_labels = ['Truth=0, Append=0', 'Truth=0, Append=1', 'Truth=1, Append=0', 'Truth=1, Append=1']
         handles, _ = ax1.get_legend_handles_labels()
-        ax1.legend(handles[:4], legend_labels, fontsize=14)
+        # ax1.legend(handles[:4], legend_labels, fontsize=14)
+        ax1.legend(handles[:4], fontsize=14)
         
         # Second subplot: Ordered by discriminability
         plt.sca(ax2)
@@ -511,7 +512,7 @@ if __name__ == "__main__":
     save_base = os.path.join('lie_detector_results/i_discriminative_tokens', args.args_name)
 
     # Configuration (modify these paths as needed)
-    probe_responses_path = os.path.join(save_base, 'probe_response.csv')
+    probe_responses_path = os.path.join(save_base, 'new_probe_response.csv')
     probe_questions_path = os.path.join(save_base, 'new_probe_questions.csv')
     output_path = save_base
     

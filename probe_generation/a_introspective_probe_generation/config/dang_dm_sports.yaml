@@ -1,0 +1,35 @@
+batch_size: 10
+question_instruction: "Answer with 30 words."
+questions_data_name: "dangerous_advice_balanced_sports"
+probe_file_name: "probes_nonsense"
+model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
+prompt_idx: 11
+probe_response_type: yn
+
+num_initial_generation_samples: 32
+temperature: 0.6
+top_p: 0.95
+
+examples_in_context: 5
+probes_to_augment: 10
+max_generation_tokens: 75
+samples_per_truncation: 8
+
+banned_words: ['hiking', 'hiker', 'skydiv', 'parachute', 'extreme', 'base', 'activties', 'skiing', 'skier', 'whitewater', 'jump', 'adventure', 'climb']
+
+context_length: 10
+n_probe_samples: 50
+n_order_samples: 8
+
+# python probe_generation/a_introspective_probe_generation/a_initial_answers.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+# python probe_generation/a_introspective_probe_generation/a2_stochastic_initial_answers.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+
+# python probe_generation/a_introspective_probe_generation/b_original_probe_questions.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+# python probe_generation/a_introspective_probe_generation/b2_original_probe_analysis.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+
+# python probe_generation/a_introspective_probe_generation/c_generate_truncated_probes.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+# python probe_generation/a_introspective_probe_generation/c2_truncated_probe_questions.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+# python probe_generation/a_introspective_probe_generation/c3_truncated_probe_analysis.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+# python probe_generation/a_introspective_probe_generation/c4_truncated_probe_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+
+# python probe_generation/a_introspective_probe_generation/d_fixed_context_length_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml

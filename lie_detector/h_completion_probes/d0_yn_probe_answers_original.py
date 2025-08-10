@@ -31,9 +31,21 @@ limit_to_lying = args.limit_to_lying
 save_base = os.path.join('lie_detector_results/i_discriminative_tokens', args.args_name)
 os.makedirs(save_base, exist_ok=True)
 args.save(save_base)
-probe_questions_path = os.path.join(save_base, 'new_probe_questions.csv')
-probe_response_path = os.path.join(save_base, 'new_probe_response.csv')
-probe_questions = pd.read_csv(probe_questions_path)['generated_question']
-probe_questions = probe_questions.map(lambda x: x.split("Here's a question:  ")[-1].replace('\\n', ' '))
 
-main(initial_answers_args_name, questions_data_name, prompt_index, system_prompt, question_instruction, probe_response_path, probe_questions, batch_size, model_name, limit_to_lying)
+probe_response_path = os.path.join(save_base, 'original_probe_response.csv')
+
+probe_questions = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')['probe']
+probe_questions = probe_questions.apply(lambda x: x.split('?')[0])
+
+main(
+    initial_answers_args_name=initial_answers_args_name,
+    questions_data_name=questions_data_name,
+    prompt_index=prompt_index,
+    system_prompt=system_prompt,
+    question_instruction=question_instruction,
+    probe_response_path=probe_response_path,
+    probe_questions=probe_questions,
+    batch_size=batch_size,
+    model_name=model_name,
+    limit_to_lying=limit_to_lying
+)

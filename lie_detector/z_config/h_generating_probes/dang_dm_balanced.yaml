@@ -8,7 +8,7 @@ probe_analysis_args_name: dang_dm_balanced
 questions_data_name: "dangerous_advice_balanced"
 excluded_probe_types: []  # Already reduced!
 question_instruction: "Answer with 30 words."
-probe_file_name: "probes_with_yn_unknowable_balanced"
+probe_file_name: "probes_with_yn_nonsense_balanced"
 probe_response_type: "yn"
 prompt_idx: 11
 limit_to_lying: false
@@ -28,4 +28,4 @@ chosen_layers: [23, 24, 25, 26, 27, 28, 29]
 context_lengths: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 samples_per_context_length: 32
 
-excluded_probe_indices: [14,15,16,17,39]
+excluded_probe_indices: []

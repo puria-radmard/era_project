@@ -45,12 +45,11 @@ response_data = pd.read_csv(initial_answers_path)
 
 initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
 
-
-# Get the prompts which most reliably cause lies 
 with open('data/all_prompts.json', 'r') as f:
     prompts = json.load(f)
     lie_prompt = prompts['lie_prompts'][prompt_index]
     truth_prompt = prompts['truth_prompts'][prompt_index]
+
 
 # Get questions which reliably truthed and lied
 if limit_to_lying:
