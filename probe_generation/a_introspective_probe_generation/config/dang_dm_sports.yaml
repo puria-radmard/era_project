@@ -1,3 +1,5 @@
+persona_prompt_in_context: false
+
 batch_size: 10
 question_instruction: "Answer with 30 words."
 questions_data_name: "dangerous_advice_balanced_sports"
@@ -19,7 +21,7 @@ banned_words: ['hiking', 'hiker', 'skydiv', 'parachute', 'extreme', 'base', 'act
 
 context_length: 10
 n_probe_samples: 50
-n_order_samples: 8
+n_order_samples: 1 # 8 --- just for testing!!
 
 # python probe_generation/a_introspective_probe_generation/a_initial_answers.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
 # python probe_generation/a_introspective_probe_generation/a2_stochastic_initial_answers.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
@@ -33,3 +35,7 @@ n_order_samples: 8
 # python probe_generation/a_introspective_probe_generation/c4_truncated_probe_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
 
 # python probe_generation/a_introspective_probe_generation/d_fixed_context_length_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+# python probe_generation/a_introspective_probe_generation/d2_visualise_steerability_vs_discriminability.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+
+# python probe_generation/a_introspective_probe_generation/e_probe_self_consistency.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml
+# python probe_generation/a_introspective_probe_generation/e2_visualise_self_consistency.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports.yaml

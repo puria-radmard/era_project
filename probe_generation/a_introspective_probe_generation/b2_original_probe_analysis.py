@@ -344,6 +344,12 @@ if __name__ == "__main__":
     print(f"Non-unity probability sums: {len(non_unity_probs)} / {len(prob_sums)}")
     
     # Plot probe type analysis (unchanged)
+
+    # (Pdb) probe_responses_data.columns
+    # Index(['question_idx', 'truth', 'probe_question_idx', 'prob_yes', 'prob_no',
+    #     'i_append_string', 'log_odds', 'probe_type', 'probe'],
+    #     dtype='object')
+
     discriminability_results = plot_probe_type_analysis_modified(probe_responses_data, os.path.join(output_path, 'c_original_probe_analysis.png'))
     filename = os.path.join(output_path, 'c_discriminability_results.json')
     

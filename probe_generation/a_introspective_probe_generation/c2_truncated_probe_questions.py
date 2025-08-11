@@ -30,12 +30,13 @@ initial_answers_df = pd.read_csv(initial_answers_path)
 main(
     initial_answers_df=initial_answers_df,
     questions_data_name=args.questions_data_name,
-    # prompt_index,
+    prompt_index = prompt_idx,
     question_instruction=args.question_instruction,
     probe_response_path=probe_response_path,
     probe_questions=probe_questions,
     batch_size=args.batch_size,
     model_name=args.model_name,
     limit_to_lying=False,
+    persona_prompt_in_context = args.persona_prompt_in_context
 )
 

@@ -46,5 +46,21 @@ print(f"Non-unity probability sums: {len(non_unity_probs)} / {len(prob_sums)}")
 discriminability_results = compute_probe_discriminability_modified(probe_responses_data)
 filename = os.path.join(output_path, 'c_truncated_discriminability_results.json')
 
+# Get top 10 and bottom 10 entries by abs(mean(effect_sizes_by_append))
+for entry in discriminability_results:
+    entry['mean_effect_size'] = np.mean(np.abs(entry['effect_sizes_by_append']))
+
+sorted_results = sorted(discriminability_results, key=lambda x: x['mean_effect_size'])
+extremes_results = sorted_results[:10] + sorted_results[-10:]
+
+extremes_probe_idxs = [entry['probe_idx'] for entry in extremes_results]
+extremes_probe_responses_data = probe_responses_data[probe_responses_data['probe_question_idx'].isin(extremes_probe_idxs)]
+
+extremes_probe_responses_data['probe'] = extremes_probe_responses_data.generated_sequence
+extremes_probe_responses_data['probe_type'] = 'Optimised'
+
+plot_probe_type_analysis_modified(extremes_probe_responses_data, os.path.join(output_path, 'c_truncated_probe_analysis.png'))
+
+
 with open(filename, 'w') as f:
     json.dump(discriminability_results, f, indent=2)

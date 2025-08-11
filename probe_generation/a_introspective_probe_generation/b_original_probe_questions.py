@@ -13,23 +13,25 @@ def main(
     *_,
     initial_answers_df: str,
     questions_data_name: str,
-    # prompt_index,
+    prompt_index: int,
     question_instruction: str,
     probe_response_path: str,
     probe_questions: pd.Series,
     batch_size: int,
     model_name: str,
     limit_to_lying: bool,
+    persona_prompt_in_context: bool,
     append_strings: list[str] = ["Answer with yes or no.", "Answer with no or yes."]
     ):
 
     initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
 
-    # # Get the prompts which most reliably cause lies 
-    # with open('data/all_prompts.json', 'r') as f:
-    #     prompts = json.load(f)
-    #     lie_prompt = prompts['lie_prompts'][prompt_index]
-    #     truth_prompt = prompts['truth_prompts'][prompt_index]
+    if persona_prompt_in_context:
+        # Get the prompts which most reliably cause lies 
+        with open('data/all_prompts.json', 'r') as f:
+            prompts = json.load(f)
+            lie_prompt = prompts['lie_prompts'][prompt_index]
+            truth_prompt = prompts['truth_prompts'][prompt_index]
 
     # Get questions which reliably truthed and lied
     if limit_to_lying:
@@ -79,16 +81,14 @@ def main(
         response_row = trainable_answers[trainable_answers['question_idx'] == qai]
 
         truth_cache_info = chat_wrapper.create_prompt_cache(
-            system_prompt="",
-            #system_prompt=truth_prompt,
+            system_prompt=truth_prompt if persona_prompt_in_context else "",
             in_context_questions=[f'{question} {question_instruction}'],
             in_context_answers=[response_row.truth_answer.item()]
         )
         truth_cache = truth_cache_info["cache"]
 
         lie_cache_info = chat_wrapper.create_prompt_cache(
-            system_prompt="",
-            #system_prompt=lie_prompt,
+            system_prompt=lie_prompt if persona_prompt_in_context else "",
             in_context_questions=[f'{question} {question_instruction}'],
             in_context_answers=[response_row.lie_answer.item()]
         )
@@ -190,12 +190,13 @@ if __name__ == '__main__':
     main(
         initial_answers_df=initial_answers_df,
         questions_data_name=args.questions_data_name,
-        # prompt_index,
+        prompt_index = prompt_idx,
         question_instruction=args.question_instruction,
         probe_response_path=probe_response_path,
         probe_questions=probe_questions,
         batch_size=args.batch_size,
         model_name=args.model_name,
         limit_to_lying=False,
+        persona_prompt_in_context=args.persona_prompt_in_context
     )
 

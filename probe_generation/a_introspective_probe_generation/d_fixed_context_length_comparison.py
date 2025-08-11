@@ -26,7 +26,8 @@ N = args.context_length  # fixed context length
 n_probe_samples = args.n_probe_samples  # number of random probe sets per generation type
 n_order_samples = args.n_order_samples  # number of random orderings per probe set
 
-persona_types = ['aligned', 'misaligned', 'random']
+# persona_types = ['aligned', 'misaligned', 'random']
+persona_types = ['aligned', 'misaligned']
 generation_types = ['lie-truth_contrastive', 'truth-lie_contrastive', 'lie-only', 'truth-only']
 
 # Prepare for saving results
@@ -78,25 +79,28 @@ chat_wrapper = load_model(model_name, device='auto')
 
 print(f"Starting experiment with {len(generation_types)} generation types...")
 
-# Main experimental loops
-for gen_idx, generation_type in enumerate(generation_types):
+append_strings = ["Answer with yes or no.", "Answer with no or yes."]
+n_append_types = len(append_strings)
 
-    # Setup numpy arrays for results
-    print("Setting up result arrays...")
-    generation_type_results = {}
+# Setup numpy arrays for results
+print("Setting up result arrays...")
+all_results = {}
+for generation_type in generation_types:
+    all_results[generation_type] = {}
     for persona_type in persona_types:
-        generation_type_results[persona_type] = {
-            'context_contents_indices': np.full((n_probe_samples, N), -1, dtype=int),
+        all_results[generation_type][persona_type] = {
+            'ordered_context_indices': np.full((n_probe_samples, n_order_samples, N), -1, dtype=int),
+            'context_append_indices': np.full((n_probe_samples, n_order_samples, N), -1, dtype=int),
             'question_truth_log_probs': np.full((n_probe_samples, n_order_samples, len(unique_eval_questions), n_stochastic_samples), np.nan),
             'question_lie_log_probs': np.full((n_probe_samples, n_order_samples, len(unique_eval_questions), n_stochastic_samples), np.nan),
         }
 
-    print(f"\n{'='*80}")
-    print(f"PROCESSING GENERATION TYPE: {generation_type} ({gen_idx+1}/{len(generation_types)})")
-    print(f"{'='*80}")
-    
-    # Sample many random sets of augmented probes for this generation type
-    for probe_sample_idx in range(n_probe_samples):
+
+# Sample many random sets of augmented probes for this generation type
+for probe_sample_idx in range(n_probe_samples):
+
+    # Main experimental loops
+    for gen_idx, generation_type in enumerate(generation_types):
 
         print(f"  Processing probe sample {probe_sample_idx + 1}/{n_probe_samples} for generation type '{generation_type}'...")
         
@@ -143,10 +147,6 @@ for gen_idx, generation_type in enumerate(generation_types):
             
             # Get probe question text
             probe_questions_text.append(sampled_row['generated_sequence'])
-            
-        # Store context contents indices
-        for persona_type in persona_types:
-            generation_type_results[persona_type]['context_contents_indices'][probe_sample_idx] = context_contents_indices
         
         # Generate yes/no answers for each persona type
         persona_answers = {}
@@ -155,8 +155,8 @@ for gen_idx, generation_type in enumerate(generation_types):
                 answers = ['Yes.' if effect > 0 else 'No.' for effect in effect_sizes]
             elif persona_type == 'misaligned': 
                 answers = ['No.' if effect > 0 else 'Yes.' for effect in effect_sizes]
-            else:  # random
-                answers = ['Yes.' if random.random() < 0.5 else 'No.' for _ in effect_sizes]
+            #else:  # random
+            #    answers = ['Yes.' if random.random() < 0.5 else 'No.' for _ in effect_sizes]
             persona_answers[persona_type] = answers
         
         # Test multiple random orderings of these questions
@@ -168,7 +168,26 @@ for gen_idx, generation_type in enumerate(generation_types):
             shuffle_indices = list(range(N))
             random.shuffle(shuffle_indices)
             
-            shuffled_questions = [probe_questions_text[i] for i in shuffle_indices]
+            # Randomly select append indices for each context question (shared across personas)
+            context_append_indices = [random.randint(0, n_append_types-1) for _ in range(N)]
+            
+            # Apply append types to questions
+            shuffled_questions_with_append = []
+            ordered_context_indices = []
+            for i, shuffle_idx in enumerate(shuffle_indices):
+                base_question = probe_questions_text[shuffle_idx]
+                append_idx = context_append_indices[i]
+                if append_idx == 0:
+                    final_question = base_question + " " + append_strings[0]
+                else:  # append_idx == 1
+                    final_question = base_question + " " + append_strings[1]
+                shuffled_questions_with_append.append(final_question)
+                ordered_context_indices.append(context_contents_indices[shuffle_idx])
+            
+            # Store context append indices
+            for persona_type in persona_types:
+                all_results[generation_type][persona_type]['context_append_indices'][probe_sample_idx, order_idx] = context_append_indices
+                all_results[generation_type][persona_type]['ordered_context_indices'][probe_sample_idx, order_idx] = ordered_context_indices
             
             # Test each persona with this ordering
             for persona_type in persona_types:
@@ -178,7 +197,7 @@ for gen_idx, generation_type in enumerate(generation_types):
                 # Create base cache with system prompt and context
                 base_cache_info = chat_wrapper.create_prompt_cache(
                     system_prompt="",
-                    in_context_questions=shuffled_questions,
+                    in_context_questions=shuffled_questions_with_append,
                     in_context_answers=shuffled_answers,
                     prefiller=None
                 )
@@ -230,13 +249,13 @@ for gen_idx, generation_type in enumerate(generation_types):
                     lie_log_probs = elicit_sequence_log_probs(chat_wrapper, question_cache, lie_responses)
 
                     # Store results
-                    generation_type_results[persona_type]['question_truth_log_probs'][probe_sample_idx, order_idx, q_idx_pos] = truth_log_probs.cpu().numpy()
-                    generation_type_results[persona_type]['question_lie_log_probs'][probe_sample_idx, order_idx, q_idx_pos] = lie_log_probs.cpu().numpy()
+                    all_results[generation_type][persona_type]['question_truth_log_probs'][probe_sample_idx, order_idx, q_idx_pos] = truth_log_probs.cpu().numpy()
+                    all_results[generation_type][persona_type]['question_lie_log_probs'][probe_sample_idx, order_idx, q_idx_pos] = lie_log_probs.cpu().numpy()
 
         # Save intermediate results after every ordering sample
         print(f"Completed {probe_sample_idx + 1}/{n_probe_samples} samples for {generation_type}")
         for persona_type in persona_types:
             results_path = os.path.join(output_path, f'steering_results_{generation_type}_{persona_type}.npy')
-            np.save(results_path, generation_type_results[persona_type])
+            np.save(results_path, all_results[generation_type][persona_type])
 
 print(f"\nExperiment completed! Results saved to: {output_path}")
