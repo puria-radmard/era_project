@@ -11,7 +11,7 @@ import json
 import math
 import pandas as pd
 from pathlib import Path
-from model.together import (
+from model.fireworks import (
     TogetherBatchWrapper,
     load_batch_metadata
 )

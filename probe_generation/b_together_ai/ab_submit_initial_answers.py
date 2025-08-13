@@ -9,7 +9,7 @@ import os
 import sys
 import json
 import pandas as pd
-from model.together import (
+from model.fireworks import (
     TogetherBatchWrapper,
     save_batch_metadata
 )
