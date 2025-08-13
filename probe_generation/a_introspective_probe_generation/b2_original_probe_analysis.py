@@ -351,7 +351,7 @@ if __name__ == "__main__":
     #     dtype='object')
 
     discriminability_results = plot_probe_type_analysis_modified(probe_responses_data, os.path.join(output_path, 'c_original_probe_analysis.png'))
-    filename = os.path.join(output_path, 'c_discriminability_results.json')
+    filename = os.path.join(output_path, 'b_discriminability_results.json')
     
     with open(filename, 'w') as f:
         json.dump(discriminability_results, f, indent=2)

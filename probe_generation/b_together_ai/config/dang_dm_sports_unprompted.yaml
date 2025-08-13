@@ -1,0 +1,22 @@
+model_name: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo" # "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+prompt_idx: 11
+questions_data_name: "dangerous_advice_balanced_sports"
+question_instruction: "Answer with 30 words."
+
+probe_file_name: probes_typed_rebalanced
+persona_prompt_in_context: false
+limit_to_lying: false
+append_strings: ["Answer with yes or no.", "Answer with no or yes."]
+
+num_initial_generation_samples: 32
+temperature: 0.6
+top_p: 0.95
+
+# python probe_generation/b_together_ai/ab_submit_initial_answers.py probe_generation/b_together_ai/config/dang_dm_sports_unprompted.yaml
+# python probe_generation/b_together_ai/av_collect_initial_answers.py probe_generation/b_together_ai/config/dang_dm_sports_unprompted.yaml
+
+# python probe_generation/b_together_ai/ab2_submit_stochastic_initial_answers.py probe_generation/b_together_ai/config/dang_dm_sports_unprompted.yaml
+# python probe_generation/b_together_ai/av2_collect_stochastic_initial_answers.py probe_generation/b_together_ai/config/dang_dm_sports_unprompted.yaml
+
+# python probe_generation/b_together_ai/bb_submit_original_probe_questions.py probe_generation/b_together_ai/config/dang_dm_sports_unprompted.yaml
+# python probe_generation/b_together_ai/bv_collect_original_probe_questions.py probe_generation/b_together_ai/config/dang_dm_sports_unprompted.yaml

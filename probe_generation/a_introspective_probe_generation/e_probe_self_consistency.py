@@ -23,8 +23,8 @@ banned_words = args.banned_words
 
 # Experimental parameters
 context_lengths = list(range(10))  # [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-n_probe_samples = args.n_probe_samples  # number of random probe selections per generation type
-n_order_samples = args.n_order_samples  # number of random orderings per probe sample
+n_probe_samples = args.n_probe_samples_sc  # number of random probe selections per generation type
+n_order_samples = args.n_order_samples_sc  # number of random orderings per probe sample
 generation_types = ['lie-truth_contrastive', 'truth-lie_contrastive', 'lie-only', 'truth-only']
 persona_types = ['aligned', 'misaligned']
 
@@ -93,14 +93,14 @@ for generation_type in generation_types:
     for persona_type in persona_types:
         all_results[generation_type][persona_type] = {
             # Dimensions: [test_original_probe_idx, context_length, probe_sample_idx, order_sample_idx]
-            'test_probe_indices': np.full((n_test_original_probes, max_context_length+1, n_probe_samples, n_order_samples), -1, dtype=int),
-            'test_append_indices': np.full((n_test_original_probes, max_context_length+1, n_probe_samples, n_order_samples), -1, dtype=int),
+            'test_probe_indices': np.full((n_test_original_probes, len(context_lengths), n_probe_samples, n_order_samples), -1, dtype=int),
+            'test_append_indices': np.full((n_test_original_probes, len(context_lengths), n_probe_samples, n_order_samples), -1, dtype=int),
             # Context dimensions: [test_original_probe_idx, context_length, probe_sample_idx, order_sample_idx, context_position]
-            'context_probe_indices': np.full((n_test_original_probes, max_context_length+1, n_probe_samples, n_order_samples, max_context_length), -1, dtype=int),
-            'context_append_indices': np.full((n_test_original_probes, max_context_length+1, n_probe_samples, n_order_samples, max_context_length), -1, dtype=int),
-            'context_generation_types': np.full((n_test_original_probes, max_context_length+1, n_probe_samples, n_order_samples, max_context_length), -1, dtype=int),
-            'test_prob_yes': np.full((n_test_original_probes, max_context_length+1, n_probe_samples, n_order_samples), np.nan),
-            'test_prob_no': np.full((n_test_original_probes, max_context_length+1, n_probe_samples, n_order_samples), np.nan),
+            'context_probe_indices': np.full((n_test_original_probes, len(context_lengths), n_probe_samples, n_order_samples, max_context_length), -1, dtype=int),
+            'context_append_indices': np.full((n_test_original_probes, len(context_lengths), n_probe_samples, n_order_samples, max_context_length), -1, dtype=int),
+            'context_generation_types': np.full((n_test_original_probes, len(context_lengths), n_probe_samples, n_order_samples, max_context_length), -1, dtype=int),
+            'test_prob_yes': np.full((n_test_original_probes, len(context_lengths), n_probe_samples, n_order_samples), np.nan),
+            'test_prob_no': np.full((n_test_original_probes, len(context_lengths), n_probe_samples, n_order_samples), np.nan),
         }
 
 # Create mapping from generation type to index for storage
@@ -118,7 +118,7 @@ for gen_idx, generation_type in enumerate(generation_types):
         # Get remaining original probes for context
         context_original_probe_indices = [p for p in original_probe_indices if p != test_original_probe_idx]
         
-        for context_length in context_lengths:
+        for i_context_length, context_length in enumerate(context_lengths):
             print(f"    Context length: {context_length}")
             
             for probe_sample_idx in tqdm(range(n_probe_samples), desc=f"Probe samples N={context_length}"):
@@ -136,10 +136,8 @@ for gen_idx, generation_type in enumerate(generation_types):
                     if test_idx in truncated_discriminability_results:
                         test_result = truncated_discriminability_results[test_idx]
                         effect_sizes_by_append = test_result['effect_sizes_by_append']
-                        if len(effect_sizes_by_append) >= 2:
-                            signs = [1 if x > 0 else -1 if x < 0 else 0 for x in effect_sizes_by_append]
-                            if len(set(signs)) == 1 and signs[0] != 0:
-                                valid_test_probes.append((test_idx, test_result, test_row))
+                        if all([(esba > 0) == (effect_sizes_by_append[0] > 0) for esba in effect_sizes_by_append]):
+                            valid_test_probes.append((test_idx, test_result, test_row))
                 
                 if len(valid_test_probes) == 0:
                     print(f"Warning: No valid test probes for original probe {test_original_probe_idx}, generation {generation_type}")
@@ -155,8 +153,11 @@ for gen_idx, generation_type in enumerate(generation_types):
                 if context_length > 0:
                     # Sample context original probes (without replacement)
                     context_original_indices = random.sample(context_original_probe_indices, min(context_length, len(context_original_probe_indices)))
+
+                    # Randomly select intended effect size direction
+                    intended_effect_signs = [random.choice([1, -1]) for _ in context_original_indices]
                     
-                    for context_original_probe_idx in context_original_indices:
+                    for i_context_original_probe_idx, context_original_probe_idx in enumerate(context_original_indices):
                         # Sample one augmented probe from this original probe
                         context_probe_candidates = probe_questions[
                             (probe_questions['probe_idx'] == context_original_probe_idx) & 
@@ -165,6 +166,7 @@ for gen_idx, generation_type in enumerate(generation_types):
                         
                         # Filter for valid context probes
                         valid_context_probes = []
+                        fallback_valid_context_probes = []   # If there are none that match the desired effect direction, use the opposite as a fallback
                         for _, context_row in context_probe_candidates.iterrows():
                             context_idx = context_row.name
                             if context_idx in truncated_discriminability_results:
@@ -172,11 +174,27 @@ for gen_idx, generation_type in enumerate(generation_types):
                                 effect_sizes_by_append = context_result['effect_sizes_by_append']
                                 if len(effect_sizes_by_append) >= 2:
                                     signs = [1 if x > 0 else -1 if x < 0 else 0 for x in effect_sizes_by_append]
-                                    if len(set(signs)) == 1 and signs[0] != 0:
+                                    if len(set(signs)) == 1 and signs[0] == intended_effect_signs[i_context_original_probe_idx]:
                                         valid_context_probes.append((context_idx, context_result, context_row))
+                                    elif len(set(signs)) == 1: # All same sign but not intended sign 
+                                        fallback_valid_context_probes.append((context_idx, context_result, context_row))
+
+                        if len(valid_context_probes) == 0:
+                            if len(fallback_valid_context_probes) == 0:
+                                message = f"Warning: No valid augmentations found for probe {context_original_probe_idx}, generation {generation_type}"
+                                print(message)
+                                with open(os.path.join(output_path, "bug.log"), "a") as bug_file:
+                                    bug_file.write(message + "\n")
+                                continue
+                            else:
+                                valid_context_probes = fallback_valid_context_probes
+                                message = f"Using fallback (opposite sign) for probe {context_original_probe_idx}, generation {generation_type}"
+                                print(message)
+                                with open(os.path.join(output_path, "fallback.log"), "a") as fallback_file:
+                                    fallback_file.write(message + "\n")
                         
                         if len(valid_context_probes) == 0:
-                            continue
+                            raise Exception('This needs to be addressed')
                         
                         # Randomly sample one context probe
                         context_probe_index, context_result, context_row = random.choice(valid_context_probes)
@@ -213,7 +231,6 @@ for gen_idx, generation_type in enumerate(generation_types):
                     for persona_type in persona_types:
                         
                         # Create context if context_length > 0
-                        cache = None
                         if context_length > 0 and len(shuffled_context_data) > 0:
                             # Generate persona-specific answers for context
                             context_questions_with_append = []
@@ -230,21 +247,14 @@ for gen_idx, generation_type in enumerate(generation_types):
                                 else:  # misaligned
                                     answer = 'No.' if context_data['effect_size'] > 0 else 'Yes.'
                                 context_answers.append(answer)
-                            
-                            # Create cache with context
-                            cache_info = chat_wrapper.create_prompt_cache(
-                                system_prompt="",
-                                in_context_questions=context_questions_with_append,
-                                in_context_answers=context_answers,
-                                prefiller=None
-                            )
-                            cache = cache_info["cache"]
                         
                         # Test the probe with this context
                         test_question_with_append = f"{test_question_text} {append_strings[test_append_idx]}"
                         
                         test_chats = [chat_wrapper.format_chat(
                             system_prompt="",
+                            in_context_questions = context_questions_with_append if context_length > 0 else None,
+                            in_context_answers = context_answers if context_length > 0 else None,
                             user_message=test_question_with_append,
                             prefiller='',
                         )]
@@ -252,22 +262,21 @@ for gen_idx, generation_type in enumerate(generation_types):
                         # Get yes/no probabilities
                         forward_result = chat_wrapper.forward(
                             chats=test_chats,
-                            past_key_values=copy.deepcopy(cache) if cache is not None else None,
                         )
                         yes_no_probs = get_choice_token_logits_from_token_ids(forward_result['logits'], yesno_tokens)
                         
                         # Store results
-                        all_results[generation_type][persona_type]['test_probe_indices'][test_original_probe_idx_pos, context_length, probe_sample_idx, order_idx] = test_probe_index
-                        all_results[generation_type][persona_type]['test_append_indices'][test_original_probe_idx_pos, context_length, probe_sample_idx, order_idx] = test_append_idx
+                        all_results[generation_type][persona_type]['test_probe_indices'][test_original_probe_idx_pos, i_context_length, probe_sample_idx, order_idx] = test_probe_index
+                        all_results[generation_type][persona_type]['test_append_indices'][test_original_probe_idx_pos, i_context_length, probe_sample_idx, order_idx] = test_append_idx
                         
                         # Store context information (pad with -1 for shorter contexts)
                         if context_length > 0 and len(shuffled_context_data) > 0:
                             for ctx_pos, (context_data, append_idx) in enumerate(zip(shuffled_context_data, context_append_indices)):
-                                all_results[generation_type][persona_type]['context_probe_indices'][test_original_probe_idx_pos, context_length, probe_sample_idx, order_idx, ctx_pos] = context_data['probe_index']
-                                all_results[generation_type][persona_type]['context_append_indices'][test_original_probe_idx_pos, context_length, probe_sample_idx, order_idx, ctx_pos] = append_idx
+                                all_results[generation_type][persona_type]['context_probe_indices'][test_original_probe_idx_pos, i_context_length, probe_sample_idx, order_idx, ctx_pos] = context_data['probe_index']
+                                all_results[generation_type][persona_type]['context_append_indices'][test_original_probe_idx_pos, i_context_length, probe_sample_idx, order_idx, ctx_pos] = append_idx
                         
-                        all_results[generation_type][persona_type]['test_prob_yes'][test_original_probe_idx_pos, context_length, probe_sample_idx, order_idx] = yes_no_probs[0, 0].item()
-                        all_results[generation_type][persona_type]['test_prob_no'][test_original_probe_idx_pos, context_length, probe_sample_idx, order_idx] = yes_no_probs[0, 1].item()
+                        all_results[generation_type][persona_type]['test_prob_yes'][test_original_probe_idx_pos, i_context_length, probe_sample_idx, order_idx] = yes_no_probs[0, 0].item()
+                        all_results[generation_type][persona_type]['test_prob_no'][test_original_probe_idx_pos, i_context_length, probe_sample_idx, order_idx] = yes_no_probs[0, 1].item()
                         
                         # Clean up
                         del forward_result

@@ -22,9 +22,9 @@ question_instruction = args.question_instruction
 banned_words = args.banned_words
 
 # Experimental parameters
-N = args.context_length  # fixed context length
+n_in_context = args.context_length  # fixed context length
 n_probe_samples = args.n_probe_samples  # number of random probe sets per generation type
-n_order_samples = args.n_order_samples  # number of random orderings per probe set
+n_order_samples = args.n_order_samples_icl  # number of random orderings per probe set
 
 # persona_types = ['aligned', 'misaligned', 'random']
 persona_types = ['aligned', 'misaligned']
@@ -89,8 +89,8 @@ for generation_type in generation_types:
     all_results[generation_type] = {}
     for persona_type in persona_types:
         all_results[generation_type][persona_type] = {
-            'ordered_context_indices': np.full((n_probe_samples, n_order_samples, N), -1, dtype=int),
-            'context_append_indices': np.full((n_probe_samples, n_order_samples, N), -1, dtype=int),
+            'ordered_context_indices': np.full((n_probe_samples, n_order_samples, n_in_context), np.iinfo(np.int32).min, dtype=int),
+            'context_append_indices': np.full((n_probe_samples, n_order_samples, n_in_context), np.iinfo(np.int32).min, dtype=int),
             'question_truth_log_probs': np.full((n_probe_samples, n_order_samples, len(unique_eval_questions), n_stochastic_samples), np.nan),
             'question_lie_log_probs': np.full((n_probe_samples, n_order_samples, len(unique_eval_questions), n_stochastic_samples), np.nan),
         }
@@ -108,8 +108,11 @@ for probe_sample_idx in range(n_probe_samples):
         context_contents_indices = []
         effect_sizes = []
         probe_questions_text = []
+
+        # Randomly select intended effect size direction
+        intended_effect_signs = [random.choice([1, -1]) for _ in original_probe_idxs]
         
-        for orig_probe_idx in original_probe_idxs:
+        for i_orig_probe_idx, orig_probe_idx in enumerate(original_probe_idxs):
 
             # Get available augmentations for this original probe and generation type
             available_augmentations = probe_questions[
@@ -119,6 +122,7 @@ for probe_sample_idx in range(n_probe_samples):
             
             # Filter to augmentations with consistent effect sign and discriminability results
             valid_augmentations = []
+            fallback_valid_augmentations = []   # If there are none that match the desired effect direction, use the opposite as a fallback
             for _, aug_row in available_augmentations.iterrows():
                 aug_idx = aug_row.name
                 if aug_idx in truncated_discriminability_results:
@@ -127,15 +131,24 @@ for probe_sample_idx in range(n_probe_samples):
                     # Check if effect signs are consistent across append types
                     if len(effect_sizes_by_append) >= 2:
                         signs = [1 if x > 0 else -1 if x < 0 else 0 for x in effect_sizes_by_append]
-                        if len(set(signs)) == 1 and signs[0] != 0:  # All same sign and non-zero
+                        if len(set(signs)) == 1 and signs[0] == intended_effect_signs[i_orig_probe_idx]:  # All same sign and of intended sign
                             valid_augmentations.append((aug_idx, aug_result, aug_row))
+                        elif len(set(signs)) == 1: # All same sign but not intended sign 
+                            fallback_valid_augmentations.append((aug_idx, aug_result, aug_row))
             
             if len(valid_augmentations) == 0:
-                message = f"Warning: No valid augmentations found for probe {orig_probe_idx}, generation {generation_type}"
-                print(message)
-                with open(os.path.join(output_path, "bug.log"), "a") as bug_file:
-                    bug_file.write(message + "\n")
-                continue
+                if len(fallback_valid_augmentations) == 0:
+                    message = f"Warning: No valid augmentations found for probe {orig_probe_idx}, generation {generation_type}"
+                    print(message)
+                    with open(os.path.join(output_path, "bug.log"), "a") as bug_file:
+                        bug_file.write(message + "\n")
+                    continue
+                else:
+                    valid_augmentations = fallback_valid_augmentations
+                    message = f"Using fallback (opposite sign) for probe {orig_probe_idx}, generation {generation_type}"
+                    print(message)
+                    with open(os.path.join(output_path, "fallback.log"), "a") as fallback_file:
+                        fallback_file.write(message + "\n")
                 
             # Randomly sample one valid augmentation
             sampled_aug_idx, sampled_result, sampled_row = random.choice(valid_augmentations)
@@ -147,6 +160,11 @@ for probe_sample_idx in range(n_probe_samples):
             
             # Get probe question text
             probe_questions_text.append(sampled_row['generated_sequence'])
+
+        actual_n_in_context = len(context_contents_indices)
+
+        if actual_n_in_context == 0:
+            raise Exception('This needs to be addressed')
         
         # Generate yes/no answers for each persona type
         persona_answers = {}
@@ -165,11 +183,11 @@ for probe_sample_idx in range(n_probe_samples):
             print(f"    Processing order sample: {order_idx + 1} / {n_order_samples}")
             
             # Create shuffle order (shared across personas)
-            shuffle_indices = list(range(N))
+            shuffle_indices = list(range(actual_n_in_context))
             random.shuffle(shuffle_indices)
             
             # Randomly select append indices for each context question (shared across personas)
-            context_append_indices = [random.randint(0, n_append_types-1) for _ in range(N)]
+            context_append_indices = [random.randint(0, n_append_types-1) for _ in range(actual_n_in_context)]
             
             # Apply append types to questions
             shuffled_questions_with_append = []
@@ -186,8 +204,8 @@ for probe_sample_idx in range(n_probe_samples):
             
             # Store context append indices
             for persona_type in persona_types:
-                all_results[generation_type][persona_type]['context_append_indices'][probe_sample_idx, order_idx] = context_append_indices
-                all_results[generation_type][persona_type]['ordered_context_indices'][probe_sample_idx, order_idx] = ordered_context_indices
+                all_results[generation_type][persona_type]['context_append_indices'][probe_sample_idx, order_idx, :actual_n_in_context] = context_append_indices
+                all_results[generation_type][persona_type]['ordered_context_indices'][probe_sample_idx, order_idx, :actual_n_in_context] = ordered_context_indices
             
             # Test each persona with this ordering
             for persona_type in persona_types:

@@ -93,6 +93,7 @@ for generation_type in generation_types:
                 continue
                 
             order_snr = np.mean(probe_effect_sizes)
+            snr_std = np.std(probe_effect_sizes)
             
             # Get log probabilities for aligned and misaligned personas
             aligned_truth = steering_results[generation_type]['aligned']['question_truth_log_probs'][probe_sample_idx, order_idx]
@@ -131,6 +132,7 @@ for generation_type in generation_types:
                 'probe_sample_idx': probe_sample_idx,
                 'order_idx': order_idx,
                 'order_snr': order_snr,
+                'snr_std': snr_std,
                 'effectiveness_mean': effectiveness_mean,
                 'effectiveness_std': effectiveness_std,
                 'n_valid_questions': n_valid_questions,
@@ -161,24 +163,25 @@ for idx, generation_type in enumerate(generation_types):
     
     if len(gen_data) == 0:
         ax.set_title(f'{generation_type}\n(No data)')
-        ax.set_xlabel('Order-Specific SNR')
+        ax.set_xlabel('Context aggregate SNR')
         ax.set_ylabel('Steering Effectiveness\n(Aligned - Misaligned)')
         continue
     
     x = gen_data['order_snr']
     y = gen_data['effectiveness_mean']
+    xerr = gen_data['snr_std']
     yerr = gen_data['effectiveness_std']
     
-    ax.errorbar(x, y, yerr=yerr, 
+    ax.errorbar(x, y, yerr=yerr, xerr=xerr,
                color=color_map[generation_type], 
                marker='o',
                linestyle='none',
                alpha=0.7,
                capsize=3)
     
-    ax.set_xlabel('Order-Specific SNR')
+    ax.set_xlabel('Context aggregate SNR')
     ax.set_ylabel('Steering Effectiveness\n(Aligned - Misaligned)')
-    ax.set_title(f'{generation_type}\n({len(gen_data)} order samples)')
+    ax.set_title(f'{generation_type}\n({len(gen_data)} context samples)')
     ax.grid(True, alpha=0.3)
     
     # Add horizontal line at y=0 for reference

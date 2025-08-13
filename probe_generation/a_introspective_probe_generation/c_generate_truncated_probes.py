@@ -32,7 +32,7 @@ print("Loading probe discriminability data...")
 probes_df_original = pd.read_csv(f'data/probe_questions/{probe_file_name}.csv')
 
 # Load discriminability results
-discriminability_data_path = os.path.join('probe_generation_results/a_introspective_probe_generation', args.args_name, 'c_discriminability_results.json')
+discriminability_data_path = os.path.join('probe_generation_results/a_introspective_probe_generation', args.args_name, 'b_discriminability_results.json')
 with open(discriminability_data_path, 'r') as f:
     discriminability_data = json.load(f)
 

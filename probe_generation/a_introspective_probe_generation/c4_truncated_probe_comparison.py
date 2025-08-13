@@ -22,7 +22,7 @@ save_base = os.path.join('probe_generation_results/a_introspective_probe_generat
 with open(os.path.join(save_base, 'c_truncated_discriminability_results.json'), 'r') as f:
     truncated_discriminability_results_list = json.load(f)
 
-with open(os.path.join(save_base, 'c_discriminability_results.json'), 'r') as f:
+with open(os.path.join(save_base, 'b_discriminability_results.json'), 'r') as f:
     original_discriminability_results_list = json.load(f)
 
 # Convert to dictionaries keyed by probe_idx for easy lookup

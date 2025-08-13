@@ -159,7 +159,8 @@ def main(
                     })
 
                 probe_results_df = pd.concat([probe_results_df, pd.DataFrame(rows)], ignore_index=True)
-            probe_results_df.to_csv(probe_response_path, index = False)
+        
+        probe_results_df.to_csv(probe_response_path, index = False)
 
 
 

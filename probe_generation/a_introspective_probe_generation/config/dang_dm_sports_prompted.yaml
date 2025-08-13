@@ -1,6 +1,6 @@
 persona_prompt_in_context: True
 
-batch_size: 10
+batch_size: 6
 question_instruction: "Answer with 30 words."
 questions_data_name: "dangerous_advice_balanced_sports"
 probe_file_name: "probes_nonsense"
@@ -17,11 +17,13 @@ probes_to_augment: 10
 max_generation_tokens: 75
 samples_per_truncation: 8
 
-banned_words: ['hiking', 'hiker', 'skydiv', 'parachute', 'extreme', 'base', 'activties', 'skiing', 'skier', 'whitewater', 'jump', 'adventure', 'climb']
+banned_words: ['hike', 'hiking', 'hiker', 'skydiv', 'parachute', 'extreme', 'base', 'activties', 'ski', 'whitewater', 'jump', 'adventure', 'climb', 'raft', 'kayak', 'boulder', 'harm', '.', '!', 'danger']
 
 context_length: 10
 n_probe_samples: 50
-n_order_samples: 1 # 8 --- just for testing!!
+n_probe_samples_sc: 32
+n_order_samples_icl: 1
+n_order_samples_sc: 8
 
 # # python probe_generation/a_introspective_probe_generation/a_initial_answers.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
 # # python probe_generation/a_introspective_probe_generation/a2_stochastic_initial_answers.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
@@ -34,5 +36,14 @@ n_order_samples: 1 # 8 --- just for testing!!
 # python probe_generation/a_introspective_probe_generation/c3_truncated_probe_analysis.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
 # python probe_generation/a_introspective_probe_generation/c4_truncated_probe_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
 
-# python probe_generation/a_introspective_probe_generation/d_fixed_context_length_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
+# python probe_generation/a_introspective_probe_generation/d_fixed_context_length_truncated_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
 # python probe_generation/a_introspective_probe_generation/d2_visualise_steerability_vs_discriminability.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
+
+# python probe_generation/a_introspective_probe_generation/d3_fixed_context_length_original_comparison.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
+# python probe_generation/a_introspective_probe_generation/d4_visualise_original_steerability_vs_discriminability.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
+
+# python probe_generation/a_introspective_probe_generation/e_probe_self_consistency.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
+# python probe_generation/a_introspective_probe_generation/e2_visualise_self_consistency.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
+
+# python probe_generation/a_introspective_probe_generation/e3_original_probe_self_consistency.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
+# python probe_generation/a_introspective_probe_generation/e4_visualise_original_probe_self_consistency.py probe_generation/a_introspective_probe_generation/config/dang_dm_sports_prompted.yaml
