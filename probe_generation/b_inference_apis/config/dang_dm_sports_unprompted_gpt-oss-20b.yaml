@@ -12,7 +12,7 @@ num_initial_generation_samples: 32
 temperature: 0.6
 top_p: 0.95
 
-context_lengths_icl: [1, 2, 5, 10, 20, 30, 40]
+context_lengths_icl: [0, 1, 2, 5, 10, 20, 30, 40]
 n_samples_icl: 32
 
 # python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml

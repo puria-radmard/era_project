@@ -54,8 +54,8 @@ def extract_yesno_logprob(response_data: dict) -> float:
     
     # Search backwards through tokens to find last Yes/No
     for i in range(len(tokens) - 1, -1, -1):
-        token = tokens[i].strip().lower()
-        if token in ['yes', 'no']:
+        token = tokens[i].strip()
+        if token in ['Yes', 'No']:
             return token_logprobs[i]
     
     # If no Yes/No found, this shouldn't happen with proper prefilling
@@ -89,7 +89,7 @@ def process_probe_results_to_dataframe(
             question_idx, probe_idx, append_idx, truth_flag, yes_no_flag = parse_custom_id(custom_id)
             
             # Extract logprob for the Yes/No token
-            logprob = extract_yesno_logprob(result['response']['body'])
+            logprob = extract_yesno_logprob(result['response'])
             
             # Group key
             key = (question_idx, probe_idx, append_idx, truth_flag)
@@ -167,7 +167,7 @@ def main(
     print(f"Probe batch status: {probe_status['status']}")
     
     # Check if batch is completed
-    if probe_status['status'] != 'JOB_STATE_COMPLETED':
+    if probe_status['status'] != batch_wrapper.success_code:
         print("\nBatch not yet completed.")
         print(f"Current status: {probe_status['status']}")
         
@@ -191,11 +191,11 @@ def main(
     probe_results_path = os.path.join(raw_outputs_dir, 'probe_results.jsonl')
     probe_errors_path = os.path.join(raw_outputs_dir, 'probe_errors.jsonl')
     
-    batch_wrapper.download_batch_results(
-        probe_batch_id, 
-        probe_results_path,
-        probe_errors_path
-    )
+    # batch_wrapper.download_batch_results(
+    #     probe_batch_id, 
+    #     probe_results_path,
+    #     probe_errors_path
+    # )
     
     print("Results downloaded successfully!")
     
@@ -214,7 +214,7 @@ def main(
     print("\n" + "="*60)
     print("PROBE COLLECTION COMPLETE!")
     print("="*60)
-    
+
     # Group by truth context for summary
     truth_results = df[df['truth'] == 1]
     lie_results = df[df['truth'] == 0]

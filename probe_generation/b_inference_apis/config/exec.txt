@@ -1,0 +1,9 @@
+// Testing initial answers with llama 8b
+
+python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml

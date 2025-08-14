@@ -22,7 +22,7 @@ def load_discriminability_data(save_base: str) -> Tuple[List[int], List[int]]:
     Returns:
         Tuple of (positive_sign_probe_idxs, negative_sign_probe_idxs)
     """
-    with open(os.path.join(save_base, 'b_discriminability_results.json'), 'r') as f:
+    with open(os.path.join(save_base, 'b_original_probe_questions', 'discriminability_results.json'), 'r') as f:
         discriminability_results = json.load(f)
     
     def shared_sign(effect_sizes):
@@ -47,7 +47,7 @@ def load_discriminability_data(save_base: str) -> Tuple[List[int], List[int]]:
         item['probe_idx'] for item in shared_sign_results
         if shared_sign(item['effect_sizes_by_append']) == -1
     ]
-    
+
     print(f"Found {len(positive_sign_idxs)} positive-effect probes, {len(negative_sign_idxs)} negative-effect probes")
     return positive_sign_idxs, negative_sign_idxs
 
@@ -193,7 +193,7 @@ def create_batch_requests(
                 
             if context_length == 0:
                 break
-    
+        
     return all_requests
 
 
@@ -211,8 +211,8 @@ def main(
     """Main function to submit in-context steering batch jobs."""
     
     # Setup paths
-    save_base = os.path.join('probe_generation_results/a_introspective_probe_generation', args_name)
-    steering_dir = os.path.join(save_base, 'd_original_in_context_steering')
+    save_base = os.path.join('probe_generation_results/b_neurips_workshop_results', args_name)
+    steering_dir = os.path.join(save_base, 'c_in_context_liar')
     os.makedirs(steering_dir, exist_ok=True)
     
     batch_tmp_dir = os.path.join(steering_dir, 'batch_tmp')
@@ -237,7 +237,7 @@ def main(
     # ]
     
     initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
-    stochastic_df = pd.read_csv(os.path.join(save_base, 'a_stochastic_initial_answers.csv'))
+    stochastic_df = pd.read_csv(os.path.join(save_base, 'a2_stochastic_initial_questions', 'initial_answers_stochastic.csv'))
     
     positive_probe_idxs, negative_probe_idxs = load_discriminability_data(save_base)
     

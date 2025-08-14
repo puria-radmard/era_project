@@ -16,6 +16,8 @@ from pathlib import Path
 # Load environment variables
 load_dotenv()
 
+MAX_ID_LENGTH = 63
+
 class FireworksBatchWrapper:
     """
     Wrapper for Fireworks.ai Batch Inference API operations using the Fireworks SDK.
@@ -146,10 +148,10 @@ class FireworksBatchWrapper:
         dataset = Dataset.from_file(jsonl_filepath)
         dataset.sync()
         print(f"Dataset created with ID: {dataset.id}")
-        
+
         # Generate unique job ID
         job_id = f"batch-{int(time.time())}"
-        output_dataset_id = f"{dataset.id}-output-{self.model_name.split('/')[-1]}"
+        output_dataset_id = f"{dataset.id}-output-{self.model_name.split('/')[-1]}"[:MAX_ID_LENGTH]
         
         # Extract inference parameters from the first request to use as defaults
         # Individual requests can still override these in their body
@@ -250,7 +252,7 @@ class FireworksBatchWrapper:
         # Extract just the dataset ID from the full path
         dataset_id = output_dataset_id.split("/")[-1]
         output_dataset = Dataset.from_id(dataset_id)
-        
+
         # Create output directory
         os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         
