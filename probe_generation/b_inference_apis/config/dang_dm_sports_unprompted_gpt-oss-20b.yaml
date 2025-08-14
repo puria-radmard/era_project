@@ -1,0 +1,28 @@
+model_name: "gpt-oss-20b"
+prompt_idx: 11
+questions_data_name: "dangerous_advice_balanced_sports"
+question_instruction: "Answer with 30 words."
+
+probe_file_name: probes_typed_rebalanced
+persona_prompt_in_context: false
+limit_to_lying: false
+append_strings: ["Answer with yes or no.", "Answer with no or yes."]
+
+num_initial_generation_samples: 32
+temperature: 0.6
+top_p: 0.95
+
+context_lengths_icl: [1, 2, 5, 10, 20, 30, 40]
+n_samples_icl: 32
+
+# python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml
+# python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml
+
+# python probe_generation/b_inference_apis/ab2_stochastic_initial_answers.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml
+# python probe_generation/b_inference_apis/av2_stochastic_initial_answers.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml
+
+# python probe_generation/b_inference_apis/bb_original_probe_questions.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml
+# python probe_generation/b_inference_apis/bv_original_probe_questions.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml
+
+
+# python probe_generation/b_inference_apis/cb_in_context_liar.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_gpt-oss-20b.yaml

@@ -1,67 +1,49 @@
 """
-Together.ai Batch API Utilities
+Fireworks.ai Batch Inference API Utilities (SDK-based)
 
-This module provides utilities for working with Together.ai's Batch API,
-including batch job submission, monitoring, and result collection.
+This module provides utilities for working with Fireworks.ai's Batch Inference API
+using the high-level Fireworks SDK, including batch job submission, monitoring, and result collection.
 """
 
 import json
 import os
+import time
 from typing import Dict, List, Optional, Tuple, Any
-from together import Together
+from fireworks import Dataset, BatchInferenceJob
 from dotenv import load_dotenv
 from pathlib import Path
 
 # Load environment variables
 load_dotenv()
 
-class TogetherBatchWrapper:
+class FireworksBatchWrapper:
     """
-    Wrapper for Together.ai Batch API operations.
-    Only supports models that have batch inference capabilities.
+    Wrapper for Fireworks.ai Batch Inference API operations using the Fireworks SDK.
+    Works with all models in the Fireworks model library.
     """
-    
-    # Models that support batch inference (from Together.ai docs)
-    SUPPORTED_MODELS = [
-        "deepseek-ai/DeepSeek-R1",
-        "deepseek-ai/DeepSeek-V3", 
-        "meta-llama/Llama-3-70b-chat-hf",
-        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-        "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-        "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo",
-        "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", 
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-        "mistralai/Mistral-7B-Instruct-v0.1",
-        "mistralai/Mixtral-8x7B-Instruct-v0.1",
-        "Qwen/Qwen2.5-72B-Instruct-Turbo",
-        "Qwen/Qwen2.5-7B-Instruct-Turbo",
-        "Qwen/Qwen3-235B-A22B-fp8-tput",
-        "Qwen/QwQ-32B"
-    ]
+
+    success_code = 3
     
     def __init__(self, model_name: str):
         """
         Initialize the batch wrapper.
         
         Args:
-            model_name: Name of the model (must support batch inference)
+            model_name: Name of the model (e.g., "llama-v3p1-8b-instruct")
             
         Raises:
-            ValueError: If model doesn't support batch inference
-            ValueError: If TOGETHER_API_KEY not found
+            ValueError: If FIREWORKS_API_KEY not found
         """
-        if model_name not in self.SUPPORTED_MODELS:
-            raise ValueError(f"Model {model_name} doesn't support batch inference. "
-                           f"Supported models: {self.SUPPORTED_MODELS}")
-        
-        api_key = os.getenv("TOGETHER_API_KEY")
+        api_key = os.getenv("FIREWORKS_API_KEY")
         if not api_key:
-            raise ValueError("TOGETHER_API_KEY not found in environment variables. "
+            raise ValueError("FIREWORKS_API_KEY not found in environment variables. "
                            "Please set it in your .env file.")
         
-        self.model_name = model_name
-        self.client = Together(api_key=api_key)
+        self.model_name = 'accounts/fireworks/models/' + model_name
+        self.api_key = api_key
+        
+        # Store batch job reference for status tracking
+        self._current_batch_job = None
     
     def format_chat_for_batch(
         self,
@@ -78,7 +60,7 @@ class TogetherBatchWrapper:
     ) -> Dict[str, Any]:
         """
         Format a single chat request for batch processing.
-        Matches the interface of ChatTemplateWrapper.format_chat.
+        Matches the interface of the Together.ai ChatTemplateWrapper.format_chat.
         
         Args:
             custom_id: Unique identifier for this request
@@ -113,7 +95,6 @@ class TogetherBatchWrapper:
             messages.append({"role": "assistant", "content": prefiller})
         
         body = {
-            "model": self.model_name,
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
@@ -151,50 +132,93 @@ class TogetherBatchWrapper:
     
     def upload_and_submit_batch(self, jsonl_filepath: str) -> str:
         """
-        Upload JSONL file and submit batch job.
+        Upload JSONL file as dataset and submit batch inference job using Fireworks SDK.
         
         Args:
             jsonl_filepath: Path to the JSONL file
             
         Returns:
-            Batch ID string
+            Batch job ID string
         """
-        print(f"Uploading file: {jsonl_filepath}")
+        print(f"Uploading dataset and creating batch job: {jsonl_filepath}")
+
+        # Create dataset from file using Fireworks SDK
+        dataset = Dataset.from_file(jsonl_filepath)
+        dataset.sync()
+        print(f"Dataset created with ID: {dataset.id}")
         
-        # Upload file
-        file_resp = self.client.files.upload(
-            file=jsonl_filepath, 
-            purpose="batch-api"
+        # Generate unique job ID
+        job_id = f"batch-{int(time.time())}"
+        output_dataset_id = f"{dataset.id}-output-{self.model_name.split('/')[-1]}"
+        
+        # Extract inference parameters from the first request to use as defaults
+        # Individual requests can still override these in their body
+        default_params = {}
+        with open(jsonl_filepath, 'r') as f:
+            first_request = json.loads(f.readline())
+            body = first_request.get('body', {})
+            
+            # Extract common inference parameters
+            for param in ['max_tokens', 'temperature', 'top_p', 'top_k', 'n']:
+                if param in body:
+                    default_params[param] = body[param]
+        
+        # Create batch inference job using SDK
+        batch_job = BatchInferenceJob.create(
+            model=self.model_name,
+            input_dataset_id=dataset.id,
+            output_dataset_id=output_dataset_id,
+            job_id=job_id,
+            inference_parameters=default_params,
+            api_key=self.api_key
         )
-        print(f"File uploaded with ID: {file_resp.id}")
         
-        # Create batch
-        batch = self.client.batches.create_batch(
-            file_id=file_resp.id,
-            endpoint="/v1/chat/completions"
-        )
-        print(f"Batch created with ID: {batch.id}")
+        # Store reference for status tracking
+        self._current_batch_job = batch_job
         
-        return batch.id
+        print(f"Batch inference job created with ID: {job_id}")
+        return job_id
     
     def get_batch_status(self, batch_id: str) -> Dict[str, Any]:
         """
-        Get the current status of a batch job.
+        Get the current status of a batch inference job.
         
         Args:
-            batch_id: The batch ID
+            batch_id: The batch job ID
             
         Returns:
             Batch status dictionary
         """
-        batch = self.client.batches.get_batch(batch_id)
+        # Extract account from API key or use environment variable
+        account = os.getenv("FIREWORKS_ACCOUNT_ID")
+        if not account:
+            raise ValueError("FIREWORKS_ACCOUNT_ID not found in environment variables")
+        
+        batch_job = BatchInferenceJob.get(
+            job_id=batch_id, 
+            account=account, 
+            api_key=self.api_key
+        )
+        
+        if not batch_job:
+            return {
+                "id": batch_id,
+                "status": "NOT_FOUND",
+                "created_at": None,
+                "model": None,
+                "input_dataset_id": None,
+                "output_dataset_id": None,
+                "update_time": None
+            }
+        
         return {
-            "id": batch.id,
-            "status": batch.status,
-            "created_at": batch.created_at,
-            "request_count": getattr(batch, 'request_count', 0),
-            "output_file_id": getattr(batch, 'output_file_id', None),
-            "error_file_id": getattr(batch, 'error_file_id', None)
+            "id": batch_id,
+            "status": batch_job.state,
+            "created_at": batch_job.create_time,
+            "model": batch_job.model,
+            "input_dataset_id": batch_job.input_dataset_id,
+            "output_dataset_id": batch_job.output_dataset_id,
+            "update_time": batch_job.update_time
         }
     
     def download_batch_results(
@@ -202,55 +226,64 @@ class TogetherBatchWrapper:
         batch_id: str, 
         output_filepath: str,
         error_filepath: Optional[str] = None
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> None:
         """
         Download batch results if completed.
         
         Args:
-            batch_id: The batch ID
+            batch_id: The batch job ID
             output_filepath: Where to save the output results
-            error_filepath: Where to save error results (optional)
-            
-        Returns:
-            Tuple of (success, error_message)
+            error_filepath: Where to save error results (optional, not used in current SDK)
         """
         status = self.get_batch_status(batch_id)
         current_status = status["status"]
         
         # Check for failure states
-        if current_status in ["FAILED", "EXPIRED", "CANCELLED"]:
-            return False, f"Batch failed with status: {current_status}"
+        if current_status != self.success_code:
+            raise Exception(f"Batch not yet completed or has failed. Current status: {current_status}")
         
-        if current_status != "COMPLETED":
-            return False, f"Batch not yet completed. Current status: {current_status}"
+        output_dataset_id = status["output_dataset_id"]
+        if not output_dataset_id:
+            raise Exception("No output dataset available")
         
-        if not status["output_file_id"]:
-            return False, "No output file available"
+        # Create Dataset object from output dataset ID and download
+        # Extract just the dataset ID from the full path
+        dataset_id = output_dataset_id.split("/")[-1]
+        output_dataset = Dataset.from_id(dataset_id)
         
-        # Download output file
+        # Create output directory
         os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         
-        try:
-            self.client.files.retrieve_content(
-                id=status["output_file_id"],
-                output=output_filepath
-            )
-            print(f"Downloaded results to: {output_filepath}")
+        # The Fireworks SDK doesn't expose a direct download method in the reference,
+        # but we can work with the dataset object. For now, we'll indicate success
+        # and let the user work with the Dataset object if needed.
+        
+        # Save dataset reference for potential future use
+        with open(output_filepath + ".dataset_info", 'w') as f:
+            json.dump({
+                "dataset_id": dataset_id,
+                "dataset_name": output_dataset.name,
+                "batch_job_id": batch_id
+            }, f, indent=2)
+        
+        # Get all the data from the dataset        
+        # Try to get all data - use a very large number since we don't know the size
+        # The head() method should return all available data if we request more than exists
+        all_data = output_dataset.head(1000000, as_dataset=False)  # Large number to get everything
+
+        print(f"Retrieved {len(all_data)} results from output dataset")
+        
+        # Save as JSONL file
+        with open(output_filepath, 'w') as f:
+            for item in all_data:
+                # The item should already be in the correct format for batch results
+                # Each item should contain custom_id and response data
+                json.dump(item, f)
+                f.write('\n')
+        
+        print(f"Results saved to: {output_filepath}")
             
-            # Download error file if it exists and error_filepath provided
-            if status.get("error_file_id") and error_filepath:
-                os.makedirs(os.path.dirname(error_filepath), exist_ok=True)
-                self.client.files.retrieve_content(
-                    id=status["error_file_id"],
-                    output=error_filepath  
-                )
-                print(f"Downloaded errors to: {error_filepath}")
-            
-            return True, None
-            
-        except Exception as e:
-            return False, f"Error downloading results: {str(e)}"
-    
+
 def save_batch_metadata(
     save_dir: str,
     **metadata_kwargs
