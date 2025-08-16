@@ -14,8 +14,15 @@ from typing import Dict, List, Tuple, Any
 from model.fireworks import FireworksBatchWrapper, save_batch_metadata
 from util.util import YamlConfig
 
+def shared_sign(effect_sizes):
+    signs = [1 if x > 0 else -1 if x < 0 else 0 for x in effect_sizes]
+    unique_signs = set(signs)
+    if len(unique_signs) == 1 and 0 not in unique_signs:
+        return signs[0]
+    return None
 
-def load_discriminability_data(save_base: str) -> Tuple[List[int], List[int]]:
+
+def load_discriminability_data(save_base: str) -> Tuple[List[int], List[int], List[float], List[float]]:
     """
     Load discriminability results and filter to shared-sign probes.
     
@@ -25,12 +32,10 @@ def load_discriminability_data(save_base: str) -> Tuple[List[int], List[int]]:
     with open(os.path.join(save_base, 'b_original_probe_questions', 'discriminability_results.json'), 'r') as f:
         discriminability_results = json.load(f)
     
-    def shared_sign(effect_sizes):
-        signs = [1 if x > 0 else -1 if x < 0 else 0 for x in effect_sizes]
-        unique_signs = set(signs)
-        if len(unique_signs) == 1 and 0 not in unique_signs:
-            return signs[0]
-        return None
+    positive_sign_idxs = []
+    positive_magnitudes = []
+    negative_sign_idxs = []
+    negative_magnitudes = []
     
     # Filter to shared-sign results
     shared_sign_results = [
@@ -38,37 +43,54 @@ def load_discriminability_data(save_base: str) -> Tuple[List[int], List[int]]:
         if shared_sign(item['effect_sizes_by_append']) is not None
     ]
     
-    positive_sign_idxs = [
-        item['probe_idx'] for item in shared_sign_results
-        if shared_sign(item['effect_sizes_by_append']) == 1
-    ]
-    
-    negative_sign_idxs = [
-        item['probe_idx'] for item in shared_sign_results
-        if shared_sign(item['effect_sizes_by_append']) == -1
-    ]
+    for item in shared_sign_results:
+        effect_sizes = item['effect_sizes_by_append']
+        magnitude = sum(abs(x) for x in effect_sizes) / len(effect_sizes)
+        
+        if shared_sign(effect_sizes) == 1:
+            positive_sign_idxs.append(item['probe_idx'])
+            positive_magnitudes.append(magnitude)
+        else:
+            negative_sign_idxs.append(item['probe_idx'])
+            negative_magnitudes.append(magnitude)
 
     print(f"Found {len(positive_sign_idxs)} positive-effect probes, {len(negative_sign_idxs)} negative-effect probes")
-    return positive_sign_idxs, negative_sign_idxs
+    return positive_sign_idxs, negative_sign_idxs, positive_magnitudes, negative_magnitudes
 
 
 def sample_balanced_context(
     n_context: int,
     positive_probe_idxs: List[int],
-    negative_probe_idxs: List[int]
-) -> Tuple[List[int], List[int]]:
+    negative_probe_idxs: List[int],
+    positive_magnitudes: List[float],
+    negative_magnitudes: List[float],
+    use_largest_magnitude: bool = False
+):
     """
     Randomly sample N context probes with balanced effect signs.
     
     Returns:
         Tuple of (selected_probe_idxs, intended_effect_signs)
     """
+    # Validation checks
+    assert len(positive_probe_idxs) == len(positive_magnitudes)
+    assert len(negative_probe_idxs) == len(negative_magnitudes)
+    assert all(x >= 0 for x in positive_magnitudes)
+    assert all(x >= 0 for x in negative_magnitudes)
+
     # Randomly choose intended effect signs (roughly 50/50)
     intended_effect_signs = [random.choice([1, -1]) for _ in range(n_context)]
     
-    # Shuffle the probe pools
-    shuffled_positive = random.sample(positive_probe_idxs, len(positive_probe_idxs))
-    shuffled_negative = random.sample(negative_probe_idxs, len(negative_probe_idxs))
+    if use_largest_magnitude:
+        # Sort by magnitude instead of shuffling
+        pos_sorted = sorted(zip(positive_probe_idxs, positive_magnitudes), key=lambda x: x[1], reverse=True)
+        neg_sorted = sorted(zip(negative_probe_idxs, negative_magnitudes), key=lambda x: x[1], reverse=True)
+        shuffled_positive = [idx for idx, _ in pos_sorted]
+        shuffled_negative = [idx for idx, _ in neg_sorted]
+    else:
+        # Existing random logic
+        shuffled_positive = random.sample(positive_probe_idxs, len(positive_probe_idxs))
+        shuffled_negative = random.sample(negative_probe_idxs, len(negative_probe_idxs))
     
     # Track pointers for each pool
     ptrs = {1: 0, -1: 0}
@@ -95,6 +117,14 @@ def sample_balanced_context(
             else:
                 raise ValueError("Ran out of probes in both pools")
     
+    
+    # Shuffle selected_probe_idxs and intended_effect_signs together to randomize order
+    combined = list(zip(selected_probe_idxs, intended_effect_signs))
+    random.shuffle(combined)
+    selected_probe_idxs, intended_effect_signs = zip(*combined)
+    selected_probe_idxs = list(selected_probe_idxs)
+    intended_effect_signs = list(intended_effect_signs)
+
     return selected_probe_idxs, intended_effect_signs
 
 
@@ -126,16 +156,21 @@ def create_batch_requests(
     question_instruction: str,
     append_strings: List[str],
     positive_probe_idxs: List[int],
-    negative_probe_idxs: List[int]
-) -> List[Dict[str, Any]]:
+    negative_probe_idxs: List[int],
+    positive_probe_magnitudes: List[float],
+    negative_probe_magnitudes: List[float],
+    use_largest_magnitude: bool
+) -> Dict[int, List[Dict[str, Any]]]:
     """Create all batch requests for the experiment."""
     
-    all_requests = []
+    all_requests = {}
     unique_eval_questions = stochastic_df['question_idx'].unique()
     context_types = ['aligned', 'misaligned', 'random']
     
     for context_length in context_lengths:
         print(f"Creating requests for context length: {context_length}")
+
+        this_context_length_requests = []
         
         for sample_idx in range(n_samples):
             print(f"  Sample {sample_idx + 1}/{n_samples}")
@@ -147,7 +182,10 @@ def create_batch_requests(
             else:
                 # Sample balanced context
                 selected_probe_idxs, intended_effect_signs = sample_balanced_context(
-                    context_length, positive_probe_idxs, negative_probe_idxs
+                    context_length,
+                    positive_probe_idxs, negative_probe_idxs, 
+                    positive_probe_magnitudes, negative_probe_magnitudes,
+                    use_largest_magnitude
                 )
                 
                 # Create context questions with random append strings
@@ -189,11 +227,13 @@ def create_batch_requests(
                                 logprobs=True,
                                 echo=True
                             )
-                            all_requests.append(request)
+                            this_context_length_requests.append(request)
                 
             if context_length == 0:
                 break
         
+        all_requests[context_length] = this_context_length_requests
+
     return all_requests
 
 
@@ -206,13 +246,15 @@ def main(
     context_lengths: List[int],
     n_samples: int,
     append_strings: List[str],
+    use_largest_magnitude: bool,
     # banned_words: List[str]
+    subdir_name: str
 ):
     """Main function to submit in-context steering batch jobs."""
     
     # Setup paths
     save_base = os.path.join('probe_generation_results/b_neurips_workshop_results', args_name)
-    steering_dir = os.path.join(save_base, 'c_in_context_liar')
+    steering_dir = os.path.join(save_base, subdir_name)
     os.makedirs(steering_dir, exist_ok=True)
     
     batch_tmp_dir = os.path.join(steering_dir, 'batch_tmp')
@@ -239,7 +281,7 @@ def main(
     initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
     stochastic_df = pd.read_csv(os.path.join(save_base, 'a2_stochastic_initial_questions', 'initial_answers_stochastic.csv'))
     
-    positive_probe_idxs, negative_probe_idxs = load_discriminability_data(save_base)
+    positive_probe_idxs, negative_probe_idxs, positive_probe_magnitudes, negative_probe_magnitudes = load_discriminability_data(save_base)
     
     # Create all batch requests
     print("Creating batch requests...")
@@ -253,34 +295,41 @@ def main(
         question_instruction=question_instruction,
         append_strings=append_strings,
         positive_probe_idxs=positive_probe_idxs,
-        negative_probe_idxs=negative_probe_idxs
+        negative_probe_idxs=negative_probe_idxs,
+        positive_probe_magnitudes=positive_probe_magnitudes,
+        negative_probe_magnitudes=negative_probe_magnitudes,
+        use_largest_magnitude=use_largest_magnitude
     )
-    
-    print(f"Created {len(all_requests)} total requests")
 
-    exit()
+    num_requests = sum(len(x) for x in all_requests.values())
+    print(f"Created {num_requests} total requests:")
+
+    batch_ids = {}
+
+    for k, v in all_requests.items():
+        print(f"\tN={k} has {len(v)} requests")
+
+        # Create and submit batch
+        steering_jsonl_path = os.path.join(batch_tmp_dir, f'steering_batch_N{k}.jsonl')
+        batch_wrapper.create_batch_file(v, steering_jsonl_path)
     
-    # Create and submit batch
-    steering_jsonl_path = os.path.join(batch_tmp_dir, 'steering_batch.jsonl')
-    batch_wrapper.create_batch_file(all_requests, steering_jsonl_path)
-    
-    print("\nSubmitting steering batch...")
-    steering_batch_id = batch_wrapper.upload_and_submit_batch(steering_jsonl_path)
-    
+        print("\t\tSubmitting steering batch...")
+        batch_ids[k] = batch_wrapper.upload_and_submit_batch(steering_jsonl_path)
+
     # Save metadata
-    print("\nSaving batch metadata...")
+    print("\t\tSaving batch metadata...")
     save_batch_metadata(
         save_dir=steering_dir,
-        steering_batch_id=steering_batch_id,
+        steering_batch_ids_by_context=batch_ids,
         model_name=model_name,
-        total_requests=len(all_requests),
+        total_requests=num_requests,
         context_lengths=context_lengths,
         n_samples=n_samples,
         questions_data_name=questions_data_name,
         question_instruction=question_instruction,
         probe_file_name=probe_file_name,
         append_strings=append_strings,
-        banned_words=banned_words,
+        # banned_words=banned_words,
         num_positive_probes=len(positive_probe_idxs),
         num_negative_probes=len(negative_probe_idxs)
     )
@@ -288,8 +337,8 @@ def main(
     print("\n" + "="*60)
     print("IN-CONTEXT STEERING BATCH SUBMISSION COMPLETE!")
     print("="*60)
-    print(f"Batch ID: {steering_batch_id}")
-    print(f"Total requests: {len(all_requests)}")
+    print(f"Batch IDs: {batch_ids}")
+    print(f"Total requests: {num_requests}")
     print(f"Context lengths tested: {context_lengths}")
     print(f"Samples per length: {n_samples}")
 
@@ -308,4 +357,6 @@ if __name__ == '__main__':
         n_samples=args.n_samples_icl,
         append_strings=args.append_strings,
         # banned_words=args.banned_words
+        use_largest_magnitude=False,
+        subdir_name='c_in_context_liar'
     )

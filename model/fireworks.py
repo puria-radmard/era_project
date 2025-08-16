@@ -7,6 +7,8 @@ using the high-level Fireworks SDK, including batch job submission, monitoring, 
 
 import json
 import os
+import shutil
+import subprocess
 import time
 from typing import Dict, List, Optional, Tuple, Any
 from fireworks import Dataset, BatchInferenceJob
@@ -151,7 +153,7 @@ class FireworksBatchWrapper:
 
         # Generate unique job ID
         job_id = f"batch-{int(time.time())}"
-        output_dataset_id = f"{dataset.id}-output-{self.model_name.split('/')[-1]}"[:MAX_ID_LENGTH]
+        output_dataset_id = f"{dataset.id}-output-{self.model_name.split('/')[-1]}"[:MAX_ID_LENGTH].strip('-')
         
         # Extract inference parameters from the first request to use as defaults
         # Individual requests can still override these in their body
@@ -256,10 +258,6 @@ class FireworksBatchWrapper:
         # Create output directory
         os.makedirs(os.path.dirname(output_filepath), exist_ok=True)
         
-        # The Fireworks SDK doesn't expose a direct download method in the reference,
-        # but we can work with the dataset object. For now, we'll indicate success
-        # and let the user work with the Dataset object if needed.
-        
         # Save dataset reference for potential future use
         with open(output_filepath + ".dataset_info", 'w') as f:
             json.dump({
@@ -268,23 +266,48 @@ class FireworksBatchWrapper:
                 "batch_job_id": batch_id
             }, f, indent=2)
         
-        # Get all the data from the dataset        
-        # Try to get all data - use a very large number since we don't know the size
-        # The head() method should return all available data if we request more than exists
-        all_data = output_dataset.head(1000000, as_dataset=False)  # Large number to get everything
+        # Try the easier method to download the dataset:
 
-        print(f"Retrieved {len(all_data)} results from output dataset")
+        some_data = output_dataset.head(5, as_dataset=False)
         
-        # Save as JSONL file
-        with open(output_filepath, 'w') as f:
-            for item in all_data:
-                # The item should already be in the correct format for batch results
-                # Each item should contain custom_id and response data
-                json.dump(item, f)
-                f.write('\n')
-        
-        print(f"Results saved to: {output_filepath}")
+        if len(some_data):
+            # Get all the data from the dataset        
+            # Try to get all data - use a very large number since we don't know the size
+            # The head() method should return all available data if we request more than exists
+            all_data = output_dataset.head(1000000, as_dataset=False)  # Large number to get everything
+
+            print(f"Retrieved {len(all_data)} results from output dataset")
             
+            # Save as JSONL file
+            with open(output_filepath, 'w') as f:
+                for item in all_data:
+                    # The item should already be in the correct format for batch results
+                    # Each item should contain custom_id and response data
+                    json.dump(item, f)
+                    f.write('\n')
+            
+            print(f"Results saved to: {output_filepath}")
+
+        else:
+            print(f"Easy retreival of dataset {dataset_id} failed, trying shell access")
+
+            parent_dir = Path(output_filepath).parent
+            cmd = ["./firectl", "download", "dataset", str(dataset_id), '--output-dir', str(parent_dir)]
+            try:
+                result = subprocess.run(cmd, check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Command failed with return code {e.returncode}")
+                print(f"Command: {' '.join(e.cmd)}")
+                print(f"stdout: {e.stdout}")
+                print(f"stderr: {e.stderr}")
+                raise
+
+            source_file = parent_dir / 'dataset' / dataset_id / 'BIJOutputSet.jsonl'
+            shutil.move(str(source_file), str(output_filepath))
+
+            print(f"Results saved to: {output_filepath}")
+
+                
 
 def save_batch_metadata(
     save_dir: str,

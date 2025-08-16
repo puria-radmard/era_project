@@ -8,7 +8,7 @@ model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
 prompt_idx: 11
 probe_response_type: yn
 
-num_initial_generation_samples: 32
+num_initial_generation_samples: 16
 temperature: 0.6
 top_p: 0.95
 

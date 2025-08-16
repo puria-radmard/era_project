@@ -8,21 +8,9 @@ persona_prompt_in_context: false
 limit_to_lying: false
 append_strings: ["Answer with yes or no.", "Answer with no or yes."]
 
-num_initial_generation_samples: 32
+num_initial_generation_samples: 8
 temperature: 0.6
 top_p: 0.95
 
-context_lengths_icl: [0, 1, 2, 5, 10, 20, 30, 40]
-n_samples_icl: 32
-
-# python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/final_financial_unprompted_llama-v3p1-8b-instruct.yaml
-# python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/final_financial_unprompted_llama-v3p1-8b-instruct.yaml
-
-# python probe_generation/b_inference_apis/ab2_submit_stochastic_initial_answers.py probe_generation/b_inference_apis/config/final_financial_unprompted_llama-v3p1-8b-instruct.yaml
-# python probe_generation/b_inference_apis/av2_collect_stochastic_initial_answers.py probe_generation/b_inference_apis/config/final_financial_unprompted_llama-v3p1-8b-instruct.yaml
-
-# python probe_generation/b_inference_apis/bb_submit_original_probe_questions.py probe_generation/b_inference_apis/config/final_financial_unprompted_llama-v3p1-8b-instruct.yaml
-# python probe_generation/b_inference_apis/bv_collect_original_probe_questions.py probe_generation/b_inference_apis/config/final_financial_unprompted_llama-v3p1-8b-instruct.yaml
-
-
-# python probe_generation/b_inference_apis/cb_submit_in_context_liar.py probe_generation/b_inference_apis/config/final_financial_unprompted_llama-v3p1-8b-instruct.yaml
+context_lengths_icl: [0, 1, 2, 5, 10, 20, 30]
+n_samples_icl: 8

@@ -1,0 +1,89 @@
+// Testing initial answers with llama 8b
+
+# python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+# python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a_initial_answers_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+
+
+// Repeating initial answers with llama 8b
+
+# python probe_generation/b_inference_apis/a2_stochastic_initial_answers_b.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a2_stochastic_initial_answers_b.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a2_stochastic_initial_answers_b.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+# python probe_generation/b_inference_apis/a2_stochastic_initial_answers_v.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a2_stochastic_initial_answers_v.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/a2_stochastic_initial_answers_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+
+// Copy over to prompted folders
+
+# ln -s /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/financial_noprompt_llama-v3p1-8b-instruct/a_initial_questions /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/financial_prompted_llama-v3p1-8b-instruct
+# ln -s /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/financial_noprompt_llama-v3p1-8b-instruct/a2_stochastic_initial_questions /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/financial_prompted_llama-v3p1-8b-instruct
+# ln -s /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/sports_noprompt_llama-v3p1-8b-instruct/a_initial_questions /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/sports_prompted_llama-v3p1-8b-instruct
+# ln -s /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/sports_noprompt_llama-v3p1-8b-instruct/a2_stochastic_initial_questions /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/sports_prompted_llama-v3p1-8b-instruct
+# ln -s /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/medical_noprompt_llama-v3p1-8b-instruct/a_initial_questions /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/medical_prompted_llama-v3p1-8b-instruct
+# ln -s /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/medical_noprompt_llama-v3p1-8b-instruct/a2_stochastic_initial_questions /homes/pr450/repos/mr_repos/era/probe_generation_results/b_neurips_workshop_results/medical_prompted_llama-v3p1-8b-instruct
+
+
+// Probe questions without prompt
+
+# python probe_generation/b_inference_apis/b_original_probe_questions_b.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/b_original_probe_questions_b.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/b_original_probe_questions_b.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/b_original_probe_questions_v.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b_original_probe_questions_v.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b_original_probe_questions_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+
+
+// Probe questions with prompt
+
+# python probe_generation/b_inference_apis/b_original_probe_questions_b.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/b_original_probe_questions_b.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/b_original_probe_questions_b.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/b_original_probe_questions_v.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b_original_probe_questions_v.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b_original_probe_questions_v.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+
+
+// Probe steering without prompt
+
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+
+// Probe steering with prompt
+
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+
+
+

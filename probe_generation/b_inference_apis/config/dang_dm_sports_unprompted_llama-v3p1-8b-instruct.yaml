@@ -8,12 +8,12 @@ persona_prompt_in_context: false
 limit_to_lying: false
 append_strings: ["Answer with yes or no.", "Answer with no or yes."]
 
-num_initial_generation_samples: 32
+num_initial_generation_samples: 16
 temperature: 0.6
 top_p: 0.95
 
-context_lengths_icl: [0, 1, 2, 5, 10, 20, 30, 40]
-n_samples_icl: 32
+context_lengths_icl: [0, 1, 2, 5, 10, 20, 30]
+n_samples_icl: 16
 
 # python probe_generation/b_inference_apis/a_initial_answers_b.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_llama-v3p1-8b-instruct.yaml
 # python probe_generation/b_inference_apis/av_collect_initial_answers.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_llama-v3p1-8b-instruct.yaml
@@ -27,3 +27,5 @@ n_samples_icl: 32
 
 
 # python probe_generation/b_inference_apis/c_in_context_liar_b.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/c_in_context_liar_v.py probe_generation/b_inference_apis/config/dang_dm_sports_unprompted_llama-v3p1-8b-instruct.yaml
+
