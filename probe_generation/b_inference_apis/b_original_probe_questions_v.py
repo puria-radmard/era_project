@@ -191,11 +191,11 @@ def main(
     probe_results_path = os.path.join(raw_outputs_dir, 'probe_results.jsonl')
     probe_errors_path = os.path.join(raw_outputs_dir, 'probe_errors.jsonl')
     
-    # batch_wrapper.download_batch_results(
-    #     probe_batch_id, 
-    #     probe_results_path,
-    #     probe_errors_path
-    # )
+    batch_wrapper.download_batch_results(
+        probe_batch_id, 
+        probe_results_path,
+        probe_errors_path
+    )
     
     print("Results downloaded successfully!")
     

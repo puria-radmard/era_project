@@ -76,12 +76,14 @@ def extract_prefilled_logprobs(response_data: dict) -> float:
                 assistant_starts.append(i)
     
     if len(assistant_starts) < 2:
-        raise ValueError(f"Could not find two assistant headers in tokens: {tokens}")
+        start_idx = assistant_starts[-1] + 3
+        end_idx = len(tokens)
 
-    # Get the span between the final two assistant headers
-    # Content starts after the last assistant header + newline tokens
-    start_idx = assistant_starts[-2] + 3  # Skip <|start_header_id|>assistant<|end_header_id|>
-    end_idx = assistant_starts[-1]
+    else:
+        # Get the span between the final two assistant headers
+        # Content starts after the last assistant header + newline tokens
+        start_idx = assistant_starts[-2] + 3  # Skip <|start_header_id|>assistant<|end_header_id|>
+        end_idx = assistant_starts[-1]
     
     # Skip initial whitespace/newline tokens
     while start_idx < end_idx and tokens[start_idx].strip() == '':

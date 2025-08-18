@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import random
+import grpc
 import pandas as pd
 from typing import Dict, List, Tuple, Any
 from model.fireworks import FireworksBatchWrapper, save_batch_metadata
@@ -314,7 +315,12 @@ def main(
         batch_wrapper.create_batch_file(v, steering_jsonl_path)
     
         print("\t\tSubmitting steering batch...")
-        batch_ids[k] = batch_wrapper.upload_and_submit_batch(steering_jsonl_path)
+        try:
+            batch_ids[k] = batch_wrapper.upload_and_submit_batch(steering_jsonl_path)
+        except grpc._channel._InactiveRpcError as e:
+            if k == 0:
+                print(f'grpc._channel._InactiveRpcError: {e}')
+                print('This may be expected for N = 0, so ignoring and continuing')
 
     # Save metadata
     print("\t\tSaving batch metadata...")

@@ -13,4 +13,4 @@ temperature: 0.6
 top_p: 0.95
 
 context_lengths_icl: [0, 1, 2, 5, 10, 20, 30]
-n_samples_icl: 8
+n_samples_icl: 16

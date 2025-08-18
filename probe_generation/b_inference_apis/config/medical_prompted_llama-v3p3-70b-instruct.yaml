@@ -12,5 +12,6 @@ num_initial_generation_samples: 8
 temperature: 0.6
 top_p: 0.95
 
-context_lengths_icl: [0, 1, 2, 5, 10, 20, 30]
-n_samples_icl: 8
+# SKIP!
+# context_lengths_icl: [0, 1, 2, 5, 10, 20, 30]
+# n_samples_icl: 16
