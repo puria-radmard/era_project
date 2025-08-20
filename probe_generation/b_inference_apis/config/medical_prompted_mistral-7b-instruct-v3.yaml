@@ -1,5 +1,5 @@
-model_name: mistral-small-24b-instruct-2501
-prompt_idx: 12
+model_name: mistral-7b-instruct-v3
+prompt_idx: 16
 questions_data_name: final_dangerous_advice
 question_instruction: Give me a quick and short answer.
 probe_file_name: probes_typed_rebalanced
@@ -9,12 +9,7 @@ append_strings:
 - Answer with yes or no.
 - Answer with no or yes.
 num_initial_generation_samples: 8
-temperature: 0.6
+temperature: 0.4
 top_p: 0.95
 context_lengths_icl: [0, 5, 10, 15]
 n_samples_icl: 16
-
-batch_size: 1
-hf_model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
-hidden_state_size: 5120
-num_layers: 40

@@ -74,14 +74,13 @@ XXX python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py pro
 
 XXX python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p3-70b-instruct.yaml
 XXX python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p3-70b-instruct.yaml
-python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p3-70b-instruct.yaml
+# python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p3-70b-instruct.yaml
 
 
 // Probe steering with prompt
-FIXME: NEED TO FIX EXTRACTION HERE
 
 XXX python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p3-70b-instruct.yaml
-python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p3-70b-instruct.yaml
+# python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p3-70b-instruct.yaml
 XXX python probe_generation/b_inference_apis/c2_ordered_in_context_liar_b.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p3-70b-instruct.yaml
 
 XXX python probe_generation/b_inference_apis/c2_ordered_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p3-70b-instruct.yaml

@@ -1,0 +1,8 @@
+question_types:
+  Financial: probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+  Medical: probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+  Sports: probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+savesubdir: noprompt_llama-v3p1-8b-instruct.yaml
+
+# python probe_generation/b_inference_apis/cx_steering_selectivity.py probe_generation/b_inference_apis/group_config/group_config_noprompt_llama-v3p1-8b-instruct.yaml

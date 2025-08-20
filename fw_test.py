@@ -7,7 +7,7 @@ load_dotenv()
 
 url = "https://api.fireworks.ai/inference/v1/chat/completions"
 payload = {
-  "model": "accounts/fireworks/models/gpt-oss-120b",
+  "model": "accounts/fireworks/models/mistral-7b-instruct-v3",
   "max_tokens": 4096,
   "top_p": 1,
   "top_k": 40,

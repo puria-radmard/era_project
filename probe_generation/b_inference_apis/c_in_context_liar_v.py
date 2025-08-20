@@ -51,7 +51,7 @@ def parse_custom_id(custom_id: str) -> Tuple[int, int, str, int, str, int]:
     return context_length, sample_idx, context_type, question_idx, response_type, resp_idx
 
 
-def extract_prefilled_logprobs(response_data: dict) -> float:
+def extract_prefilled_logprobs(response_data: dict) -> Tuple[float, str]:
     """
     Extract the average logprob of the prefilled response tokens.
     
@@ -64,26 +64,40 @@ def extract_prefilled_logprobs(response_data: dict) -> float:
     logprobs_data = response_data['choices'][0]['logprobs']
     tokens = logprobs_data['tokens']
     token_logprobs = logprobs_data['token_logprobs']
+
+    model_name = response_data['model']
     
     # Find the last two assistant header occurrences
     assistant_starts = []
     for i, token in enumerate(tokens):
-        if token == '<|start_header_id|>':
-            # Check if next tokens form assistant header
-            if (i + 2 < len(tokens) and 
-                tokens[i + 1] == 'assistant' and 
-                tokens[i + 2] == '<|end_header_id|>'):
+        
+        if 'llama' in model_name.lower():
+            if token == '<|start_header_id|>':
+                # Check if next tokens form assistant header
+                if (i + 2 < len(tokens) and 
+                    tokens[i + 1] == 'assistant' and 
+                    tokens[i + 2] == '<|end_header_id|>'):
+                    assistant_starts.append(i)
+        
+        elif 'mistral' in model_name.lower():
+            if token == '[/INST]':
                 assistant_starts.append(i)
     
-    if len(assistant_starts) < 2:
-        start_idx = assistant_starts[-1] + 3
-        end_idx = len(tokens)
+    if 'llama' in model_name:
+        if True:
+            start_idx = assistant_starts[-1] + 3  # Skip <|start_header_id|>assistant<|end_header_id|>
+            end_idx = len(tokens)
 
+        else:
+            # Get the span between the final two assistant headers
+            # Content starts after the last assistant header + newline tokens
+            start_idx = assistant_starts[-2] + 3  # Skip <|start_header_id|>assistant<|end_header_id|>
+            end_idx = assistant_starts[-1]
+            tokens[assistant_starts[-1] + 3: len(tokens)]
+            
     else:
-        # Get the span between the final two assistant headers
-        # Content starts after the last assistant header + newline tokens
-        start_idx = assistant_starts[-2] + 3  # Skip <|start_header_id|>assistant<|end_header_id|>
-        end_idx = assistant_starts[-1]
+        start_idx = assistant_starts[-1] + 1  # Skip [/INST]
+        end_idx = len(tokens)
     
     # Skip initial whitespace/newline tokens
     while start_idx < end_idx and tokens[start_idx].strip() == '':
@@ -94,20 +108,23 @@ def extract_prefilled_logprobs(response_data: dict) -> float:
         raise ValueError("No content tokens found in prefilled response")
     
     content_logprobs = token_logprobs[start_idx:end_idx]
-    
+    content_tokens = tokens[start_idx:end_idx]      # This is just for debugging
+
     # Filter out any remaining special tokens or empty tokens
     filtered_logprobs = []
+    filtered_tokens = []
     for i in range(len(content_logprobs)):
         token = tokens[start_idx + i]
         if (not token.startswith('<|') and 
             not token.endswith('|>') and 
             token.strip() != ''):
             filtered_logprobs.append(content_logprobs[i])
+            filtered_tokens.append(content_tokens[i])
     
     if not filtered_logprobs:
         raise ValueError("No valid content tokens found after filtering")
-    
-    return np.mean(filtered_logprobs)
+
+    return np.mean(filtered_logprobs), "".join(content_tokens)
 
 
 def check_batch_statuses(batch_wrapper: FireworksBatchWrapper, batch_ids: Dict[int, str]) -> Dict[int, str]:
@@ -149,6 +166,7 @@ def download_and_process_batch(
     
     # Process results
     results = {}
+    example_rollouts = {}
     with open(results_path, 'r') as f:
         for line in f:
             result = json.loads(line.strip())
@@ -158,12 +176,14 @@ def download_and_process_batch(
             ctx_len, sample_idx, context_type, question_idx, response_type, resp_idx = parse_custom_id(custom_id)
             
             # Extract logprob
-            logprob = extract_prefilled_logprobs(result['response'])
+            logprob, rollout = extract_prefilled_logprobs(result['response'])
             
             # Store result
             key = (sample_idx, context_type, question_idx, response_type, resp_idx)
             results[key] = logprob
 
+            example_rollouts[key] = rollout
+    
     print(f"Processed {len(results)} results for context length {context_length}")
     return results
         
