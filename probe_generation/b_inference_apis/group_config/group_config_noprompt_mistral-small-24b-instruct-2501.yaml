@@ -3,6 +3,6 @@ question_types:
   Medical: probe_generation/b_inference_apis/config/medical_noprompt_mistral-small-24b-instruct-2501.yaml
   Sports: probe_generation/b_inference_apis/config/sports_noprompt_mistral-small-24b-instruct-2501.yaml
 
-savesubdir: noprompt_mistral-small-24b-instruct-2501.yaml
+savesubdir: noprompt_mistral-small-24b-instruct-2501
 
 # python probe_generation/b_inference_apis/cx_steering_selectivity.py probe_generation/b_inference_apis/group_config/group_config_noprompt_mistral-small-24b-instruct-2501.yaml

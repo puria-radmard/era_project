@@ -110,7 +110,7 @@ def load_and_deduplicate_contexts(jsonl_paths: List[str]) -> Dict[int, Dict[str,
                     
                     # Parse custom ID
                     context_length, sample_idx, context_type, question_idx, response_type, resp_idx = parse_custom_id(custom_id)
-                    
+
                     # Create deduplication key (ignore response_type and resp_idx)
                     dedup_key = (context_length, sample_idx, context_type, question_idx)
                     
@@ -194,18 +194,19 @@ def get_activations_for_contexts(
         print(f"{'='*80}")
         
         results[context_length] = {}
-        
+
         for context_type in contexts_data[context_length]:
             print(f"\nProcessing context type: {context_type}")
             
             context_list = contexts_data[context_length][context_type]
-            num_contexts = len(context_list)
+            num_contexts = max([cl['sample_idx'] for cl in context_list]) + 1
+            num_questions = max([cl['question_idx'] for cl in context_list]) + 1
             
-            # Initialize activation tensor: [num_contexts, num_layers, hidden_size]
-            activations = np.zeros([num_contexts, len(candidate_layers), hidden_state_size])
+            # Initialize activation tensor: [num_questions, num_contexts, num_layers, hidden_size]
+            activations = np.full([num_questions, num_contexts, len(candidate_layers), hidden_state_size], np.nan)
             
             # Process in batches for efficiency
-            for i in tqdm(range(0, num_contexts, batch_size), desc=f"Processing {context_type}"):
+            for i in tqdm(range(0, len(context_list), batch_size), desc=f"Processing {context_type}"):
                 batch_contexts = context_list[i:i+batch_size]
                 
                 # Create chats for this batch
@@ -239,15 +240,16 @@ def get_activations_for_contexts(
                 
                 # Extract hidden states at last token for each layer
                 hidden_states = outputs.hidden_states
-                batch_end = min(i + batch_size, num_contexts)
                 
-                for cli, layer_idx in enumerate(candidate_layers):
-                    # hidden_states[layer_idx + 1] shape: [batch_size, seq_len, hidden_size]
-                    # Take last token: [:, -1, :]
-                    layer_activations = hidden_states[layer_idx + 1].cpu().numpy()[:, -1, :]
-                    activations[i:batch_end, cli, :] = layer_activations
+                for i_bc, bc in enumerate(batch_contexts):
+                    for cli, layer_idx in enumerate(candidate_layers):
+                        # hidden_states[layer_idx + 1] shape: [batch_size, seq_len, hidden_size]
+                        # Take last token: [:, -1, :]
+                        layer_activations = hidden_states[layer_idx + 1].cpu().numpy()[:, -1, :]
+                        activations[bc['question_idx'], bc['sample_idx'], cli, :] = layer_activations
             
             results[context_length][context_type] = activations
+            assert not np.isnan(activations).any()
             print(f"Extracted activations shape: {activations.shape}")
     
     return results

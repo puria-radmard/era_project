@@ -111,6 +111,40 @@
 
 
 
+// Activations from context with/out prompt
+
+# python probe_generation/b_inference_apis/d_ordered_in_context_liar_activations.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d_ordered_in_context_liar_activations.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d_ordered_in_context_liar_activations.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/d_ordered_in_context_liar_activations.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/d_ordered_in_context_liar_activations.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/d_ordered_in_context_liar_activations.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+
+
+// Activations from prompt itself
+
+# python probe_generation/b_inference_apis/d2_prompted_liar_activations.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d2_prompted_liar_activations.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d2_prompted_liar_activations.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d2_prompted_liar_activations.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d2_prompted_liar_activations.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d2_prompted_liar_activations.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+
+// Projections
+
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+
+
+
 
 
 

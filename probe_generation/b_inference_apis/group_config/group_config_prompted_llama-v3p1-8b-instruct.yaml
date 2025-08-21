@@ -3,6 +3,6 @@ question_types:
   Medical: probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
   Sports: probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
 
-savesubdir: prompted_llama-v3p1-8b-instruct.yaml
+savesubdir: prompted_llama-v3p1-8b-instruct
 
 # python probe_generation/b_inference_apis/cx_steering_selectivity.py probe_generation/b_inference_apis/group_config/group_config_prompted_llama-v3p1-8b-instruct.yaml

@@ -305,8 +305,8 @@ def plot_context_diff_by_question_type(
     control_context_type: str,
     initial_questions_df: pd.DataFrame,
     output_path: str,
-    truth_answer_label: str = "Truth",
-    lie_answer_label: str = "Lie",
+    truth_answer_label: str = "Aligned",
+    lie_answer_label: str = "Narrowly misaligned",
     context_aliases: Optional[Dict[str, str]] = None,
     filename_prefix: str = ""
 ):
@@ -406,7 +406,11 @@ def plot_context_diff_by_question_type(
     if num_question_types == 1:
         axes = [axes]
 
-    colors = plt.cm.RdBu(np.linspace(0, 1, len(plot_context_types)))
+    
+    colors = {
+        'aligned': 'green',
+        'misaligned': 'crimson'
+    }
 
     for type_idx, question_type in enumerate(question_types):
         for i, context_type in enumerate(plot_context_types):
@@ -428,7 +432,7 @@ def plot_context_diff_by_question_type(
             axes[type_idx].errorbar(x_values, data['means'], yerr=data['stds'],
                                 label=display_name,
                                 marker='o', capsize=3, capthick=1, linewidth=2, markersize=6,
-                                color=colors[i], alpha=0.8)
+                                color=colors[context_type], alpha=0.8)
             
             # Plot individual question lines (low alpha)
             if len(data['individual_diffs']) > 0 and len(data['individual_diffs'][0]) > 0:
@@ -437,7 +441,7 @@ def plot_context_diff_by_question_type(
                     individual_diffs = [data['individual_diffs'][length_idx][q_pos] 
                                       for length_idx in range(len(data['lengths']))]
                     axes[type_idx].plot(x_values, individual_diffs, 
-                                    color=colors[i], alpha=0.2, linewidth=1)
+                                    color=colors[context_type], alpha=0.2, linewidth=1)
         
         # Add horizontal line at y=0 for reference
         axes[type_idx].axhline(y=0, color='black', linestyle='--', alpha=0.5, linewidth=1)
@@ -540,8 +544,8 @@ def main(save_base: str, subdir_name: str):
     print("\nGenerating visualization...")
     context_types = ['aligned', 'misaligned', 'random']
     context_aliases = {
-        'aligned': 'Truth-Aligned Context',
-        'misaligned': 'Lie-Aligned Context', 
+        'aligned': 'Aligned context',
+        'misaligned': 'Narrowly misaligned context', 
         'random': 'Random Context'
     }
     

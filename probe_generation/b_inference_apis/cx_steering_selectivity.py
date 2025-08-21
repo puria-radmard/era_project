@@ -151,41 +151,18 @@ def plot_selectivity_heatmaps(
     n_cols = n_lengths
     n_rows = 2  # Two rows: raw values and diagonal-normalized
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 4*n_rows), squeeze=True)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 4*n_rows), squeeze=False)
     
-    for idx, context_length in enumerate(context_lengths):
+    # Pre-calculate all matrices to determine global color scales
+    raw_matrices = []
+    normalized_matrices = []
+    
+    for context_length in context_lengths:
         # Calculate selectivity matrix
         selectivity_matrix, steering_types, target_types = calculate_selectivity_matrix(
             all_results, question_metadata, context_length
         )
-        
-        # First row: Raw values
-        ax_raw = axes[0, idx] if n_rows > 1 else axes[idx]
-        
-        im_raw = sns.heatmap(
-            selectivity_matrix,
-            xticklabels=target_types,  # Show x-labels on all top row plots
-            yticklabels=steering_types if idx == 0 else False,  # Only show y-labels on leftmost plot
-            cmap=cmap,
-            center=0,
-            annot=True,
-            fmt='.2f',
-            ax=ax_raw,
-            cbar=False,  # Remove colorbar
-            annot_kws={'size': 12}  # Slightly smaller for two rows
-        )
-        
-        ax_raw.set_title(f'Raw Cohen\'s d (N = {context_length})', fontsize=12)
-        ax_raw.set_xlabel('')
-        ax_raw.set_ylabel('')
-        
-        # Set label orientations - horizontal for x, vertical for y
-        ax_raw.set_xticklabels(ax_raw.get_xticklabels(), rotation=0, ha='center')
-        if idx == 0:
-            ax_raw.set_yticklabels(ax_raw.get_yticklabels(), rotation=90)
-        
-        # Second row: Diagonal-normalized values
-        ax_norm = axes[1, idx]
+        raw_matrices.append(selectivity_matrix)
         
         # Create diagonal-normalized matrix
         normalized_matrix = selectivity_matrix.copy()
@@ -201,44 +178,99 @@ def plot_selectivity_heatmaps(
             if diagonal_idx is not None and not np.isnan(selectivity_matrix[diagonal_idx, j]) and selectivity_matrix[diagonal_idx, j] != 0:
                 normalized_matrix[:, j] = selectivity_matrix[:, j] / abs(selectivity_matrix[diagonal_idx, j])
         
-        im_norm = sns.heatmap(
-            normalized_matrix,
+        normalized_matrices.append(normalized_matrix)
+    
+    # Calculate global vmin/vmax for each row
+    raw_values = np.concatenate([mat.flatten() for mat in raw_matrices])
+    raw_values = raw_values[~np.isnan(raw_values)]
+    raw_vmin, raw_vmax = np.percentile(raw_values, [5, 95]) if len(raw_values) > 0 else (-1, 1)
+    raw_vmax = max(abs(raw_vmin), abs(raw_vmax))  # Make symmetric
+    raw_vmin = -raw_vmax
+    
+    norm_values = np.concatenate([mat.flatten() for mat in normalized_matrices])
+    norm_values = norm_values[~np.isnan(norm_values)]
+    norm_vmin, norm_vmax = np.percentile(norm_values, [5, 95]) if len(norm_values) > 0 else (-1, 1)
+    norm_vmax = max(abs(norm_vmin), abs(norm_vmax))  # Make symmetric
+    norm_vmin = -norm_vmax
+    
+    # Plot heatmaps
+    for idx, (context_length, raw_matrix, norm_matrix) in enumerate(zip(context_lengths, raw_matrices, normalized_matrices)):
+        
+        # First row: Raw values
+        ax_raw = axes[0, idx]
+        
+        sns.heatmap(
+            raw_matrix,
             xticklabels=target_types,
-            yticklabels=steering_types if idx == 0 else False,  # Only show y-labels on leftmost plot
+            yticklabels=steering_types if idx == 0 else False,
             cmap=cmap,
             center=0,
+            vmin=raw_vmin,
+            vmax=raw_vmax,
+            annot=True,
+            fmt='.2f',
+            ax=ax_raw,
+            cbar=False,
+            annot_kws={'size': 12}
+        )
+        
+        # Top row titles show context length
+        if idx == 0:
+            ax_raw.set_title(f'N = {context_length}', fontsize=16)
+        else:
+            ax_raw.set_title(f'N = {context_length}', fontsize=16)
+        
+        # Only leftmost plot gets metric label on x-axis
+        if idx == 0:
+            ax_raw.set_ylabel('Raw Cohen\'s d', fontsize=16)
+        else:
+            ax_raw.set_xlabel('')
+        
+        # Set label orientations
+        ax_raw.set_xticklabels(ax_raw.get_xticklabels(), rotation=0, ha='center')
+        if idx == 0:
+            ax_raw.set_yticklabels(ax_raw.get_yticklabels(), rotation=90)
+        
+        # Second row: Diagonal-normalized values
+        ax_norm = axes[1, idx]
+        
+        sns.heatmap(
+            norm_matrix,
+            xticklabels=target_types,
+            yticklabels=steering_types if idx == 0 else False,
+            cmap=cmap,
+            center=0,
+            vmin=norm_vmin,
+            vmax=norm_vmax,
             annot=True,
             fmt='.2f',
             ax=ax_norm,
-            cbar=False,  # Remove colorbar
-            annot_kws={'size': 12}  # Slightly smaller for two rows
+            cbar=False,
+            annot_kws={'size': 12}
         )
         
-        ax_norm.set_title(f'Diagonal-Normalized (N = {context_length})', fontsize=12)
-        ax_norm.set_xlabel('')
-        ax_norm.set_ylabel('')
+        # No titles for bottom row
+        ax_norm.set_title('')
         
-        # Set label orientations - horizontal for x, vertical for y
+        # Only leftmost plot gets metric label on x-axis
+        if idx == 0:
+            ax_norm.set_ylabel('Diagonal-Normalised', fontsize=16)
+        else:
+            ax_norm.set_xlabel('')
+        
+        # Set label orientations
         ax_norm.set_xticklabels(ax_norm.get_xticklabels(), rotation=0, ha='center')
         if idx == 0:
             ax_norm.set_yticklabels(ax_norm.get_yticklabels(), rotation=90)
     
-    # Add shared labels with more spacing (moved x-label closer to plots)
+    # Add shared labels
     fig.text(0.5, 0.02, 'Target Question Type', ha='center', va='bottom', fontsize=16)
     fig.text(0.02, 0.5, 'Steering Context Type', ha='center', va='center', rotation='vertical', fontsize=16)
     
-    # Hide empty subplots
-    for row_idx in range(n_rows):
-        for col_idx in range(n_lengths, n_cols):
-            if col_idx < axes.shape[1]:
-                axes[row_idx, col_idx].set_visible(False)
-    
-    # Use subplots_adjust instead of tight_layout for better control
-    # plt.subplots_adjust(left=0.15, bottom=0.2, right=0.95, top=0.9, wspace=0.1, hspace=0.3)
-    plt.subplots_adjust(left=0.08, bottom=0.1, right=0.95, top=0.9)
+    # Adjust layout
+    plt.subplots_adjust(left=0.08, bottom=0.1, right=0.95, top=0.9, wspace=0.05, hspace=0.2)
     
     return fig
-
 
 
 def load_cross_type_steering_data(group_config_path: str) -> Dict[str, Dict[str, Dict[int, Dict[str, Any]]]]:
@@ -374,23 +406,6 @@ def main(group_config_path: str):
     print("  - question_metadata: Question dataframes for each type")
     print("  - group_config_path: Path to group config file")
     
-    # ============================================================================
-    # CUSTOM ANALYSIS SPACE
-    # ============================================================================
-    # Add your custom visualizations and analyses here!
-    # 
-    # Example access patterns:
-    # - all_results['political']['aligned'][5] = data for political contexts, aligned, N=5
-    # - question_metadata['political'] = questions dataframe for political configs
-    # 
-    # Each data dict contains:
-    # - 'question_truth_lie_diffs_across_samples': [n_questions, n_samples] array
-    # - 'unique_questions': list of question indices  
-    # - 'context_length': int
-    # - 'n_samples': int
-    
-    ### Plot heatmap
-
     # Calculate selectivity for available context lengths
     available_lengths = set()
     for steering_results in all_results.values():
@@ -404,20 +419,19 @@ def main(group_config_path: str):
     fig = plot_selectivity_heatmaps(
         all_results=all_results,
         question_metadata=question_metadata, 
-        context_lengths=available_lengths,  # Plot first 5 context lengths
+        context_lengths=available_lengths,
     )
 
     # Save both PNG and SVG
-    figpath_png = os.path.join('probe_generation_results/b_neurips_workshop_results', f'{YamlConfig(group_config_path).savesubdir}_selectivity.png')
-    figpath_svg = os.path.join('probe_generation_results/b_neurips_workshop_results', f'{YamlConfig(group_config_path).savesubdir}_selectivity.svg')
+    os.makedirs('probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity', exist_ok=True)
+    figpath_png = os.path.join('probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity', f'{YamlConfig(group_config_path).savesubdir}_selectivity.png')
+    figpath_svg = os.path.join('probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity', f'{YamlConfig(group_config_path).savesubdir}_selectivity.svg')
     
-    fig.savefig(figpath_png)
-    fig.savefig(figpath_svg)
+    fig.savefig(figpath_png, dpi=300, bbox_inches='tight')
+    fig.savefig(figpath_svg, bbox_inches='tight')
     
     print(f'Figure saved to {figpath_png}')
     print(f'Figure saved to {figpath_svg}')
-    
-
 
 
 if __name__ == '__main__':
