@@ -66,6 +66,10 @@ def extract_prefilled_logprobs(response_data: dict) -> Tuple[float, str]:
     token_logprobs = logprobs_data['token_logprobs']
 
     model_name = response_data['model']
+
+    if 'llama' in model_name.lower() and tokens[-4:] == ['<|start_header_id|>', 'assistant', '<|end_header_id|>', '\n\n']:
+        tokens = tokens[:-4]
+        token_logprobs = token_logprobs[:-4]
     
     # Find the last two assistant header occurrences
     assistant_starts = []
@@ -424,12 +428,23 @@ def plot_context_diff_by_question_type(
             # Add small jitter to x-values
             jitter = (i - len(plot_context_types)/2) * 0.05
             x_values = np.array(data['lengths']) + jitter
+
+            x_values = x_values.tolist()
+            means = data['means']
+            stds = data['stds']
+
+            insert_zero_flag = False
+            if 0 not in x_values:
+                insert_zero_flag = True
+                x_values.insert(0, 0.0)
+                means.insert(0, 0.0)
+                stds.insert(0, 0.0)
             
             # Get display name for legend
             display_name = context_aliases.get(context_type, context_type.replace("_", " ").title())
             
             # Plot mean line with error bars
-            axes[type_idx].errorbar(x_values, data['means'], yerr=data['stds'],
+            axes[type_idx].errorbar(x_values, means, yerr=stds,
                                 label=display_name,
                                 marker='o', capsize=3, capthick=1, linewidth=2, markersize=6,
                                 color=colors[context_type], alpha=0.8)
@@ -440,6 +455,8 @@ def plot_context_diff_by_question_type(
                 for q_pos in range(n_questions_this_type):
                     individual_diffs = [data['individual_diffs'][length_idx][q_pos] 
                                       for length_idx in range(len(data['lengths']))]
+                    if insert_zero_flag:
+                        individual_diffs.insert(0, 0.0)
                     axes[type_idx].plot(x_values, individual_diffs, 
                                     color=colors[context_type], alpha=0.2, linewidth=1)
         
@@ -512,26 +529,28 @@ def main(save_base: str, subdir_name: str):
     aggregated_dir = os.path.join(steering_dir, 'aggregated_outputs')
     plots_dir = os.path.join(steering_dir, 'plots')
     
-    for directory in [raw_outputs_dir, aggregated_dir, plots_dir]:
-        os.makedirs(directory, exist_ok=True)
+    print('SKIPPING ALL OF DOWNLOAD AND PROCESSING')
+    # # for directory in [raw_outputs_dir, aggregated_dir, plots_dir]:
+    # #     os.makedirs(directory, exist_ok=True)
     
-    # Download and process completed batches
-    print("\nDownloading and processing results...")
-    processed_results = {}
+    # # # Download and process completed batches
+    # # print("\nDownloading and processing results...")
+    # # processed_results = {}
     
-    for context_length, batch_id in completed_batches.items():
-        print(f"\nProcessing context length {context_length}...")
-        results = download_and_process_batch(batch_wrapper, context_length, batch_id, raw_outputs_dir)
-        if results is not None:
-            processed_results[context_length] = results
+    # # for context_length, batch_id in completed_batches.items():
+    # #     print(f"\nProcessing context length {context_length}...")
+    # #     results = download_and_process_batch(batch_wrapper, context_length, batch_id, raw_outputs_dir)
+    # #     if results is not None:
+    # #         processed_results[context_length] = results
     
-    if not processed_results:
-        print("ERROR: No results were successfully processed.")
-        sys.exit(1)
+    # # if not processed_results:
+    # #     print("ERROR: No results were successfully processed.")
+    # #     sys.exit(1)
     
-    # Aggregate and save results
-    print("\nAggregating and saving results...")
-    aggregate_and_save_results(processed_results, metadata, aggregated_dir)
+    # # # Aggregate and save results
+    # # print("\nAggregating and saving results...")
+    # # aggregate_and_save_results(processed_results, metadata, aggregated_dir)
+    print('SKIPPED ALL OF DOWNLOAD AND PROCESSING')
     
     # Load results for visualization
     print("\nLoading results for visualization...")
@@ -564,12 +583,12 @@ def main(save_base: str, subdir_name: str):
     print("\n" + "="*60)
     print("IN-CONTEXT STEERING COLLECTION COMPLETE!")
     print("="*60)
-    print(f"Processed context lengths: {list(processed_results.keys())}")
+    print(f"Processed context lengths: {list(all_results.keys())}")
     print(f"Aggregated results saved to: {aggregated_dir}")
     print(f"Plots saved to: {plots_dir}")
     
     # Print summary statistics
-    total_processed = sum(len(results) for results in processed_results.values())
+    total_processed = sum(len(results) for results in all_results.values())
     print(f"Total requests processed: {total_processed}")
     
     # Show which context lengths are still pending

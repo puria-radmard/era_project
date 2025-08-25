@@ -151,7 +151,8 @@ def plot_selectivity_heatmaps(
     n_cols = n_lengths
     n_rows = 2  # Two rows: raw values and diagonal-normalized
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 4*n_rows), squeeze=False)
+    fig1, axes1 = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 4*n_rows), squeeze=False)
+    fig2, axes2 = plt.subplots(1, n_cols, figsize=(4*n_cols, 4), squeeze=False)
     
     # Pre-calculate all matrices to determine global color scales
     raw_matrices = []
@@ -197,7 +198,8 @@ def plot_selectivity_heatmaps(
     for idx, (context_length, raw_matrix, norm_matrix) in enumerate(zip(context_lengths, raw_matrices, normalized_matrices)):
         
         # First row: Raw values
-        ax_raw = axes[0, idx]
+        ax1_raw = axes1[0, idx]
+        ax2_raw = axes2[0, idx]
         
         sns.heatmap(
             raw_matrix,
@@ -209,30 +211,51 @@ def plot_selectivity_heatmaps(
             vmax=raw_vmax,
             annot=True,
             fmt='.2f',
-            ax=ax_raw,
+            ax=ax1_raw,
+            cbar=False,
+            annot_kws={'size': 12}
+        )
+
+        sns.heatmap(
+            raw_matrix,
+            xticklabels=target_types,
+            yticklabels=steering_types if idx == 0 else False,
+            cmap=cmap,
+            center=0,
+            vmin=raw_vmin,
+            vmax=raw_vmax,
+            annot=True,
+            fmt='.2f',
+            ax=ax2_raw,
             cbar=False,
             annot_kws={'size': 12}
         )
         
         # Top row titles show context length
         if idx == 0:
-            ax_raw.set_title(f'N = {context_length}', fontsize=16)
+            ax1_raw.set_title(f'N = {context_length}', fontsize=16)
+            ax2_raw.set_title(f'N = {context_length}', fontsize=16)
         else:
-            ax_raw.set_title(f'N = {context_length}', fontsize=16)
+            ax1_raw.set_title(f'N = {context_length}', fontsize=16)
+            ax2_raw.set_title(f'N = {context_length}', fontsize=16)
         
         # Only leftmost plot gets metric label on x-axis
         if idx == 0:
-            ax_raw.set_ylabel('Raw Cohen\'s d', fontsize=16)
+            ax1_raw.set_ylabel('Raw Cohen\'s d', fontsize=16)
+            ax2_raw.set_ylabel('Raw Cohen\'s d', fontsize=16)
         else:
-            ax_raw.set_xlabel('')
+            ax1_raw.set_xlabel('')
+            ax2_raw.set_xlabel('')
         
         # Set label orientations
-        ax_raw.set_xticklabels(ax_raw.get_xticklabels(), rotation=0, ha='center')
+        ax1_raw.set_xticklabels(ax1_raw.get_xticklabels(), rotation=0, ha='center')
+        ax2_raw.set_xticklabels(ax2_raw.get_xticklabels(), rotation=0, ha='center')
         if idx == 0:
-            ax_raw.set_yticklabels(ax_raw.get_yticklabels(), rotation=90)
+            ax1_raw.set_yticklabels(ax1_raw.get_yticklabels(), rotation=90)
+            ax2_raw.set_yticklabels(ax2_raw.get_yticklabels(), rotation=90)
         
         # Second row: Diagonal-normalized values
-        ax_norm = axes[1, idx]
+        ax_norm = axes1[1, idx]
         
         sns.heatmap(
             norm_matrix,
@@ -264,16 +287,19 @@ def plot_selectivity_heatmaps(
             ax_norm.set_yticklabels(ax_norm.get_yticklabels(), rotation=90)
     
     # Add shared labels
-    fig.text(0.5, 0.02, 'Target Question Type', ha='center', va='bottom', fontsize=16)
-    fig.text(0.02, 0.5, 'Steering Context Type', ha='center', va='center', rotation='vertical', fontsize=16)
+    fig1.text(0.5, 0.02, 'Target Question Type', ha='center', va='bottom', fontsize=16)
+    fig2.text(0.5, 0.02, 'Target Question Type', ha='center', va='bottom', fontsize=16)
+    
+    fig1.text(0.02, 0.5, 'Steering Context Type', ha='center', va='center', rotation='vertical', fontsize=16)
+    fig2.text(0.02, 0.5, 'Steering Context Type', ha='center', va='center', rotation='vertical', fontsize=16)
     
     # Adjust layout
-    plt.subplots_adjust(left=0.08, bottom=0.1, right=0.95, top=0.9, wspace=0.05, hspace=0.2)
+    fig1.subplots_adjust(left=0.08, bottom=0.1, right=0.95, top=0.9, wspace=0.05, hspace=0.2)
     
-    return fig
+    return fig1, fig2
 
 
-def load_cross_type_steering_data(group_config_path: str) -> Dict[str, Dict[str, Dict[int, Dict[str, Any]]]]:
+def load_cross_type_steering_data(group_config_path: str, subdir_name: str) -> Dict[str, Dict[str, Dict[int, Dict[str, Any]]]]:
     """
     Load steering results for all question type configs.
     
@@ -305,7 +331,7 @@ def load_cross_type_steering_data(group_config_path: str) -> Dict[str, Dict[str,
         
         # Determine save directory
         save_base = os.path.join('probe_generation_results/b_neurips_workshop_results', config.args_name)
-        steering_dir = os.path.join(save_base, 'c2_ordered_in_context_liar')
+        steering_dir = os.path.join(save_base, subdir_name)
         aggregated_dir = os.path.join(steering_dir, 'aggregated_outputs')
         
         # Check if aggregated results exist
@@ -361,7 +387,7 @@ def load_question_metadata(group_config_path: str) -> Dict[str, pd.DataFrame]:
     return question_metadata
 
 
-def main(group_config_path: str):
+def main(group_config_path: str, subdir_name: str):
     """
     Main function to load cross-type steering data and set up for analysis.
     """
@@ -371,7 +397,7 @@ def main(group_config_path: str):
     
     # Load all steering results
     print("\nLoading cross-type steering data...")
-    all_results = load_cross_type_steering_data(group_config_path)
+    all_results = load_cross_type_steering_data(group_config_path, subdir_name)
     
     # Load question metadata
     print("\nLoading question metadata...")
@@ -416,22 +442,29 @@ def main(group_config_path: str):
         available_lengths.remove(0)
 
     # Plot heatmaps
-    fig = plot_selectivity_heatmaps(
+    fig1, fig2 = plot_selectivity_heatmaps(
         all_results=all_results,
         question_metadata=question_metadata, 
         context_lengths=available_lengths,
     )
 
     # Save both PNG and SVG
-    os.makedirs('probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity', exist_ok=True)
-    figpath_png = os.path.join('probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity', f'{YamlConfig(group_config_path).savesubdir}_selectivity.png')
-    figpath_svg = os.path.join('probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity', f'{YamlConfig(group_config_path).savesubdir}_selectivity.svg')
+    os.makedirs(f'probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity/{subdir_name}', exist_ok=True)
     
-    fig.savefig(figpath_png, dpi=300, bbox_inches='tight')
-    fig.savefig(figpath_svg, bbox_inches='tight')
-    
-    print(f'Figure saved to {figpath_png}')
-    print(f'Figure saved to {figpath_svg}')
+    fig1path_png = os.path.join(f'probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity/{subdir_name}', f'{YamlConfig(group_config_path).savesubdir}_selectivity.png')
+    fig1path_svg = os.path.join(f'probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity/{subdir_name}', f'{YamlConfig(group_config_path).savesubdir}_selectivity.svg')
+
+    fig2path_png = os.path.join(f'probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity/{subdir_name}', f'simple_{YamlConfig(group_config_path).savesubdir}_selectivity.png')
+    fig2path_svg = os.path.join(f'probe_generation_results/b_neurips_workshop_results/cx_steering_selectivity/{subdir_name}', f'simple_{YamlConfig(group_config_path).savesubdir}_selectivity.svg')
+
+    fig1.savefig(fig1path_png, dpi=300, bbox_inches='tight')
+    fig1.savefig(fig1path_svg, bbox_inches='tight')
+
+    fig2.savefig(fig2path_png, dpi=300, bbox_inches='tight')
+    fig2.savefig(fig2path_svg, bbox_inches='tight')
+
+    print(f'Figure saved to {fig1path_png}')
+    print(f'Figure saved to {fig1path_svg}')
 
 
 if __name__ == '__main__':
@@ -440,4 +473,5 @@ if __name__ == '__main__':
         sys.exit(1)
     
     group_config_path = sys.argv[1]
-    main(group_config_path)
+    main(group_config_path, subdir_name = 'c2_ordered_in_context_liar')
+    main(group_config_path, subdir_name = 'c3_ordered_tiled_in_context_liar')

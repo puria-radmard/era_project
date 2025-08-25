@@ -292,7 +292,7 @@ if __name__ == '__main__':
     base_experiment_path = os.path.join(
         'probe_generation_results/b_neurips_workshop_results', 
         config.args_name,
-        'c2_ordered_in_context_liar'
+        'c3_ordered_tiled_in_context_liar'
     )
     
     output_path = os.path.join('probe_generation_results/b_neurips_workshop_results', config.args_name, 'd_ordered_in_context_liar')

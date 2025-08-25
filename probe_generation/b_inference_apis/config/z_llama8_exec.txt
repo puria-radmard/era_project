@@ -109,6 +109,27 @@
 # python probe_generation/b_inference_apis/c_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
 
 
+// Probe steering without prompt -- actually misaligned answers!
+
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
+
+
+// Probe steering with prompt -- actually misaligned answers!
+
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+
 
 
 // Activations from context with/out prompt
@@ -136,11 +157,11 @@ python probe_generation/b_inference_apis/d_ordered_in_context_liar_activations.p
 // Projections
 
 # python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_noprompt_llama-v3p1-8b-instruct.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_prompted_llama-v3p1-8b-instruct.yaml
 # python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_noprompt_llama-v3p1-8b-instruct.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_prompted_llama-v3p1-8b-instruct.yaml
 # python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_noprompt_llama-v3p1-8b-instruct.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_prompted_llama-v3p1-8b-instruct.yaml
 
 
 

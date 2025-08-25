@@ -239,8 +239,12 @@ def create_batch_requests(
 
 
 def main(
-    args_name: str,
+    *_,
     model_name: str,
+    steering_dir: str,
+    save_base: str,
+    stochastic_df: pd.DataFrame,
+    initial_questions_df: pd.DataFrame,
     questions_data_name: str,
     question_instruction: str,
     probe_file_name: str,
@@ -249,15 +253,9 @@ def main(
     append_strings: List[str],
     use_largest_magnitude: bool,
     # banned_words: List[str]
-    subdir_name: str
 ):
     """Main function to submit in-context steering batch jobs."""
-    
-    # Setup paths
-    save_base = os.path.join('probe_generation_results/b_neurips_workshop_results', args_name)
-    steering_dir = os.path.join(save_base, subdir_name)
-    os.makedirs(steering_dir, exist_ok=True)
-    
+
     batch_tmp_dir = os.path.join(steering_dir, 'batch_tmp')
     os.makedirs(batch_tmp_dir, exist_ok=True)
     
@@ -279,11 +277,8 @@ def main(
     #     )
     # ]
     
-    initial_questions_df = pd.read_csv(f'data/initial_questions/{questions_data_name}.csv')
-    stochastic_df = pd.read_csv(os.path.join(save_base, 'a2_stochastic_initial_questions', 'initial_answers_stochastic.csv'))
-    
     positive_probe_idxs, negative_probe_idxs, positive_probe_magnitudes, negative_probe_magnitudes = load_discriminability_data(save_base)
-    
+
     # Create all batch requests
     print("Creating batch requests...")
     all_requests = create_batch_requests(
@@ -353,9 +348,20 @@ if __name__ == '__main__':
     config_path = sys.argv[1]
     args = YamlConfig(config_path)
     
+
+    # Setup paths
+    save_base = os.path.join('probe_generation_results/b_neurips_workshop_results', args.args_name)
+    steering_dir = os.path.join(save_base, 'c_in_context_liar')
+    os.makedirs(steering_dir, exist_ok=True)
+    
+    initial_questions_df = pd.read_csv(f'data/initial_questions/{args.questions_data_name}.csv')
+    stochastic_df = pd.read_csv(os.path.join(save_base, 'a2_stochastic_initial_questions', 'initial_answers_stochastic.csv'))
+
     main(
-        args_name=args.args_name,
         model_name=args.model_name,
+        steering_dir = steering_dir,
+        save_base=save_base,
+        stochastic_df=stochastic_df,
         questions_data_name=args.questions_data_name,
         question_instruction=args.question_instruction,
         probe_file_name=args.probe_file_name,
@@ -364,5 +370,4 @@ if __name__ == '__main__':
         append_strings=args.append_strings,
         # banned_words=args.banned_words
         use_largest_magnitude=False,
-        subdir_name='c_in_context_liar'
     )

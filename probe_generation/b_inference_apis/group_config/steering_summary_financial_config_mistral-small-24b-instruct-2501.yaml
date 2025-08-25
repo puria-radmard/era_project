@@ -1,0 +1,5 @@
+filename: financial_mistral-small-24b-instruct-2501
+
+configs:
+  Prompt present: probe_generation/b_inference_apis/config/financial_prompted_mistral-small-24b-instruct-2501.yaml
+  Prompt ablated: probe_generation/b_inference_apis/config/financial_noprompt_mistral-small-24b-instruct-2501.yaml

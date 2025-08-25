@@ -180,23 +180,6 @@ def project_and_normalize_activations(
     return projections_data
 
 
-def save_normalized_projections(projections_data: Dict[int, Dict[str, np.ndarray]], output_path: str) -> None:
-    """
-    Save normalized projection results to disk.
-    
-    Args:
-        projections_data: Projections organized by context_length and context_type
-        output_path: Directory to save results
-    """
-    os.makedirs(output_path, exist_ok=True)
-    
-    for context_length in projections_data:
-        for context_type in projections_data[context_length]:
-            filename = f'normalized_projections_N{context_length}_context{context_type}.npy'
-            filepath = os.path.join(output_path, filename)
-            np.save(filepath, projections_data[context_length][context_type])
-            print(f"Saved {filepath}")
-
 
 def load_question_metadata(config: YamlConfig) -> pd.DataFrame:
     """
@@ -244,6 +227,82 @@ def filter_projections_by_question_type(
             filtered_data[context_length][context_type] = filtered_projections
     
     return filtered_data
+
+
+def plot_simple_steering_effects(
+    projections_data: Dict[int, Dict[str, np.ndarray]], 
+    output_path: str
+) -> None:
+    """
+    Create a simple plot of normalized differential steering effects without legend or title.
+    
+    Args:
+        projections_data: Normalized projections [num_questions, num_layers]
+        output_path: Directory to save the plot
+    """
+    context_lengths = sorted([cl for cl in projections_data.keys() if cl > 0])  # Skip N=0
+    
+    # Determine number of layers from first available data
+    first_context_length = context_lengths[0]
+    num_layers = projections_data[first_context_length]['aligned'].shape[1]
+    
+    # Create single figure
+    fig, ax = plt.subplots(1, 1, figsize=(15, 6))
+    
+    # Color gradients: light to dark as N increases
+    greens = plt.cm.Greens(np.linspace(0.4, 1.0, len(context_lengths)))  # Aligned
+    reds = plt.cm.Reds(np.linspace(0.4, 1.0, len(context_lengths)))      # Misaligned
+    
+    layer_indices = np.arange(num_layers)
+    
+    for cl_idx, context_length in enumerate(context_lengths):
+        # Check if we have all required context types
+        required_types = ['aligned', 'misaligned', 'random']
+        if not all(ct in projections_data[context_length] for ct in required_types):
+            print(f"Warning: Missing context types for N={context_length}")
+            continue
+        
+        # Get normalized projections for this context length
+        aligned_proj = projections_data[context_length]['aligned']      # [num_questions, num_layers]
+        misaligned_proj = projections_data[context_length]['misaligned']  # [num_questions, num_layers]
+        random_proj = projections_data[context_length]['random']        # [num_questions, num_layers]
+        
+        # Calculate differences relative to random
+        aligned_diff = aligned_proj - random_proj      # [num_questions, num_layers]
+        misaligned_diff = misaligned_proj - random_proj  # [num_questions, num_layers]
+        
+        # Calculate mean and std across questions for all layers
+        aligned_means = np.mean(aligned_diff, axis=0)  # [num_layers]
+        aligned_stds = np.std(aligned_diff, axis=0)    # [num_layers]
+        misaligned_means = np.mean(misaligned_diff, axis=0)  # [num_layers]
+        misaligned_stds = np.std(misaligned_diff, axis=0)    # [num_layers]
+        
+        # Slight x-offset for each context length to prevent overlap
+        offset = (cl_idx - len(context_lengths)/2) * 0.15
+        x_aligned = layer_indices + offset
+        x_misaligned = layer_indices + offset
+        
+        # Plot with error bars (now representing variance across questions)
+        ax.errorbar(x_aligned, aligned_means, yerr=aligned_stds, 
+                   color=greens[cl_idx], marker='o', capsize=3, markersize=4,
+                   linewidth=1.5, alpha=0.8)
+        ax.errorbar(x_misaligned, misaligned_means, yerr=misaligned_stds,
+                   color=reds[cl_idx], marker='s', capsize=3, markersize=4,
+                   linewidth=1.5, alpha=0.8)
+    
+    # Add horizontal line at y=0
+    ax.axhline(y=0, color='black', linestyle='--', alpha=0.5, linewidth=1)
+    
+    # Formatting - no title, no legend
+    ax.set_xlabel('Layer Index', fontsize=12)
+    ax.set_ylabel('Δ Normalized Alignment Projection\n(vs Random Context)', fontsize=12)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(-1, num_layers)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, 'normalized_differential_steering_effects_simple.svg'), dpi=300, bbox_inches='tight')
+    plt.close()
+    print("Saved simple normalized differential steering effects plot")
 
 
 def plot_normalized_differential_steering_effects(
@@ -418,13 +477,12 @@ def main():
         activations_data, alignment_vectors, scale_factors, shift_factors
     )
     
-    # Save normalized projections
-    print("Saving normalized projection results...")
-    save_normalized_projections(projections_data, output_path)
-    
-    # Create visualization
+    # Create visualizations
     print("Creating normalized differential steering effects plot...")
     plot_normalized_differential_steering_effects(projections_data, output_path, config)
+    
+    print("Creating simple normalized differential steering effects plot...")
+    plot_simple_steering_effects(projections_data, output_path)
     
     print(f"\n{'='*80}")
     print("NORMALIZED STEERING ANALYSIS COMPLETE!")

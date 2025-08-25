@@ -90,6 +90,36 @@ python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b
 
 
 
+// Probe steering without prompt -- actually misaligned answers!
+
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_noprompt_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_noprompt_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/sports_noprompt_mistral-small-24b-instruct-2501.yaml
+
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_noprompt_mistral-small-24b-instruct-2501.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_noprompt_mistral-small-24b-instruct-2501.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_noprompt_mistral-small-24b-instruct-2501.yaml
+
+
+// Probe steering with prompt -- actually misaligned answers!
+
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_prompted_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/financial_prompted_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_b.py probe_generation/b_inference_apis/config/sports_prompted_mistral-small-24b-instruct-2501.yaml
+
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_prompted_mistral-small-24b-instruct-2501.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_prompted_mistral-small-24b-instruct-2501.yaml
+python probe_generation/b_inference_apis/c3_ordered_tiled_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_prompted_mistral-small-24b-instruct-2501.yaml
+
+
+
+
+
+
+
+
+
+
 // Probe steering without prompt -- random
 
 #### XXX #### python probe_generation/b_inference_apis/c_in_context_liar_b.py probe_generation/b_inference_apis/config/medical_noprompt_mistral-small-24b-instruct-2501.yaml
@@ -110,6 +140,9 @@ python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b
 #### XXX #### python probe_generation/b_inference_apis/c_in_context_liar_v.py probe_generation/b_inference_apis/config/medical_prompted_mistral-small-24b-instruct-2501.yaml
 #### XXX #### python probe_generation/b_inference_apis/c_in_context_liar_v.py probe_generation/b_inference_apis/config/financial_prompted_mistral-small-24b-instruct-2501.yaml
 #### XXX #### python probe_generation/b_inference_apis/c_in_context_liar_v.py probe_generation/b_inference_apis/config/sports_prompted_mistral-small-24b-instruct-2501.yaml
+
+
+
 
 
 // Activations from context with/out prompt
@@ -136,11 +169,11 @@ python probe_generation/b_inference_apis/b2_probe_analysis.py probe_generation/b
 
 // Projections
 
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_noprompt_mistral-small-24b-instruct-2501.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_prompted_mistral-small-24b-instruct-2501.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_noprompt_mistral-small-24b-instruct-2501.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_prompted_mistral-small-24b-instruct-2501.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_noprompt_mistral-small-24b-instruct-2501.yaml
-python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_prompted_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_noprompt_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/medical_prompted_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_noprompt_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/financial_prompted_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_noprompt_mistral-small-24b-instruct-2501.yaml
+# python probe_generation/b_inference_apis/d3_ordered_in_context_liar_projections.py probe_generation/b_inference_apis/config/sports_prompted_mistral-small-24b-instruct-2501.yaml
 
 
